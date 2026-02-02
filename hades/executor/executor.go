@@ -10,6 +10,7 @@ import (
 	"github.com/SoftKiwiGames/hades/hades/actions"
 	"github.com/SoftKiwiGames/hades/hades/artifacts"
 	"github.com/SoftKiwiGames/hades/hades/inventory"
+	"github.com/SoftKiwiGames/hades/hades/registry"
 	"github.com/SoftKiwiGames/hades/hades/schema"
 	"github.com/SoftKiwiGames/hades/hades/ssh"
 	"github.com/SoftKiwiGames/hades/hades/types"
@@ -52,6 +53,14 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 	// Create artifact manager for this run
 	artifactMgr := artifacts.NewManager()
 	defer artifactMgr.Clear()
+
+	// Create registry manager
+	registryMgr, err := registry.NewManager(file.Registries)
+	if err != nil {
+		result.Failed = true
+		result.Error = fmt.Errorf("failed to initialize registries: %w", err)
+		return result, result.Error
+	}
 
 	fmt.Fprintf(e.stdout, "Starting plan: %s\n", planName)
 	fmt.Fprintf(e.stdout, "Run ID: %s\n\n", result.RunID)
@@ -112,7 +121,7 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 		for _, host := range hosts {
 			fmt.Fprintf(e.stdout, "[%s] Executing job %s\n", host.Name, step.Job)
 
-			if err := e.executeJob(ctx, job, planName, step.Targets[0], host, mergedEnv, artifactMgr); err != nil {
+			if err := e.executeJob(ctx, job, planName, step.Targets[0], host, mergedEnv, artifactMgr, registryMgr); err != nil {
 				result.Failed = true
 				result.FailedStep = step.Name
 				result.FailedHost = host.Name
@@ -134,9 +143,9 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 	return result, nil
 }
 
-func (e *executor) executeJob(ctx context.Context, job *schema.Job, plan string, target string, host ssh.Host, env map[string]string, artifactMgr artifacts.Manager) error {
+func (e *executor) executeJob(ctx context.Context, job *schema.Job, plan string, target string, host ssh.Host, env map[string]string, artifactMgr artifacts.Manager, registryMgr registry.Manager) error {
 	// Create runtime context
-	runtime := types.NewRuntime(e.sshClient, artifactMgr, plan, target, host, env)
+	runtime := types.NewRuntime(e.sshClient, artifactMgr, registryMgr, plan, target, host, env)
 
 	// Execute each action sequentially
 	for i, actionSchema := range job.Actions {
@@ -167,10 +176,10 @@ func (e *executor) createAction(actionSchema *schema.Action) (actions.Action, er
 		return actions.NewMkdirAction(actionSchema.Mkdir), nil
 	}
 	if actionSchema.Push != nil {
-		return nil, fmt.Errorf("push action not yet implemented (Phase 4)")
+		return actions.NewPushAction(actionSchema.Push), nil
 	}
 	if actionSchema.Pull != nil {
-		return nil, fmt.Errorf("pull action not yet implemented (Phase 4)")
+		return actions.NewPullAction(actionSchema.Pull), nil
 	}
 	if actionSchema.Wait != nil {
 		return actions.NewWaitAction(actionSchema.Wait), nil
@@ -209,6 +218,12 @@ func (e *executor) loadJob(file *schema.File, name string) (*schema.Job, error) 
 func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.Plan, planName string, inv inventory.Inventory, targets []string, env map[string]string) error {
 	// Create artifact manager for dry-run (won't actually load artifacts)
 	artifactMgr := artifacts.NewManager()
+
+	// Create registry manager for dry-run
+	registryMgr, err := registry.NewManager(file.Registries)
+	if err != nil {
+		return fmt.Errorf("failed to initialize registries: %w", err)
+	}
 
 	fmt.Fprintf(e.stdout, "Dry-run: %s\n", planName)
 	fmt.Fprintf(e.stdout, "This will execute the following:\n\n")
@@ -249,7 +264,7 @@ func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.P
 
 		// Show actions for each host
 		for _, host := range hosts {
-			runtime := types.NewRuntime(e.sshClient, artifactMgr, planName, step.Targets[0], host, mergedEnv)
+			runtime := types.NewRuntime(e.sshClient, artifactMgr, registryMgr, planName, step.Targets[0], host, mergedEnv)
 
 			fmt.Fprintf(e.stdout, "\n  [%s]\n", host.Name)
 			for _, actionSchema := range job.Actions {

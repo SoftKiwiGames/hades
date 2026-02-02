@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/SoftKiwiGames/hades/hades/artifacts"
+	"github.com/SoftKiwiGames/hades/hades/registry"
 	"github.com/SoftKiwiGames/hades/hades/ssh"
 	"github.com/google/uuid"
 )
@@ -11,6 +12,7 @@ import (
 type Runtime struct {
 	SSHClient   ssh.Client
 	ArtifactMgr artifacts.Manager
+	RegistryMgr registry.Manager
 	Env         map[string]string
 	RunID       string
 	Plan        string
@@ -18,7 +20,7 @@ type Runtime struct {
 	Host        ssh.Host
 }
 
-func NewRuntime(sshClient ssh.Client, artifactMgr artifacts.Manager, plan string, target string, host ssh.Host, userEnv map[string]string) *Runtime {
+func NewRuntime(sshClient ssh.Client, artifactMgr artifacts.Manager, registryMgr registry.Manager, plan string, target string, host ssh.Host, userEnv map[string]string) *Runtime {
 	runID := uuid.New().String()
 
 	// Build environment with HADES_* built-ins
@@ -39,6 +41,7 @@ func NewRuntime(sshClient ssh.Client, artifactMgr artifacts.Manager, plan string
 	return &Runtime{
 		SSHClient:   sshClient,
 		ArtifactMgr: artifactMgr,
+		RegistryMgr: registryMgr,
 		Env:         env,
 		RunID:       runID,
 		Plan:        plan,

@@ -1,0 +1,123 @@
+registries:
+  prod:
+    type: filesystem
+    path: /tmp/hades-registry
+
+  staging:
+    type: filesystem
+    path: /tmp/hades-registry-staging
+
+jobs:
+  build:
+    local: true
+    artifacts:
+      app-binary:
+        path: files/config.conf  # Using config.conf as a mock binary for demo
+    actions:
+      - run: echo "Building application..."
+      - run: echo "Build complete"
+
+  publish:
+    artifacts:
+      app-binary:
+        path: files/config.conf
+    actions:
+      - run: echo "Publishing to registry..."
+      - push:
+          registry: prod
+          artifact: app-binary
+          name: myapp
+          tag: ${VERSION}
+      - run: echo "Published successfully"
+
+  deploy:
+    env:
+      VERSION:
+    actions:
+      - mkdir:
+          path: /opt/myapp
+          mode: 0755
+      - pull:
+          registry: prod
+          name: myapp
+          tag: ${VERSION}
+          to: /opt/myapp/app
+      - run: chmod +x /opt/myapp/app
+      - run: ls -la /opt/myapp/
+
+  deploy-from-staging:
+    env:
+      VERSION:
+    actions:
+      - pull:
+          registry: staging
+          name: myapp
+          tag: ${VERSION}
+          to: /tmp/myapp-staging
+      - run: ls -la /tmp/myapp-staging
+
+  confirm-deploy:
+    actions:
+      - wait:
+          message: "Canary looks good. Deploy to all hosts?"
+          timeout: "60s"
+
+plans:
+  build-and-publish:
+    steps:
+      - name: publish-to-registry
+        job: publish
+        targets:
+          - test-servers
+        limit: 1
+        env:
+          VERSION: v1.0.0
+
+  deploy-from-registry:
+    steps:
+      - name: canary
+        job: deploy
+        targets:
+          - app-servers
+        limit: 1
+        env:
+          VERSION: v1.0.0
+
+      - name: promote
+        job: deploy
+        targets:
+          - app-servers
+        parallelism: "2"
+        env:
+          VERSION: v1.0.0
+
+  full-pipeline:
+    steps:
+      - name: publish
+        job: publish
+        targets:
+          - test-servers
+        limit: 1
+        env:
+          VERSION: v2.0.0
+
+      - name: deploy-canary
+        job: deploy
+        targets:
+          - app-servers
+        limit: 1
+        env:
+          VERSION: v2.0.0
+
+      - name: gate
+        job: confirm-deploy
+        targets:
+          - test-servers
+        limit: 1
+
+      - name: deploy-all
+        job: deploy
+        targets:
+          - app-servers
+        env:
+          VERSION: v2.0.0
