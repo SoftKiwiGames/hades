@@ -1,0 +1,77 @@
+jobs:
+  setup-dirs:
+    actions:
+      - mkdir:
+          path: /opt/myapp
+          mode: 0755
+      - mkdir:
+          path: /var/log/myapp
+          mode: 0755
+      - run: echo "Directories created"
+
+  deploy-config:
+    env:
+      VERSION:
+      MODE:
+        default: production
+    actions:
+      - template:
+          src: templates/service.conf.tmpl
+          dst: /tmp/service.conf
+      - copy:
+          src: files/config.conf
+          dst: /tmp/config.conf
+      - run: cat /tmp/service.conf
+      - run: cat /tmp/config.conf
+
+  deploy-with-artifact:
+    artifacts:
+      myapp:
+        path: files/config.conf
+    actions:
+      - mkdir:
+          path: /opt/myapp
+          mode: 0755
+      - copy:
+          artifact: myapp
+          dst: /opt/myapp/app.conf
+      - run: ls -la /opt/myapp/
+
+  confirm-deploy:
+    actions:
+      - run: echo "About to deploy..."
+      - wait:
+          message: "Proceed with deployment?"
+          timeout: "30s"
+      - run: echo "Deployment confirmed!"
+
+plans:
+  full-setup:
+    steps:
+      - name: create-directories
+        job: setup-dirs
+        targets:
+          - test-servers
+
+      - name: deploy-configuration
+        job: deploy-config
+        targets:
+          - test-servers
+        env:
+          VERSION: v1.0.0
+          MODE: staging
+
+  artifact-test:
+    steps:
+      - name: test-artifacts
+        job: deploy-with-artifact
+        targets:
+          - test-servers
+
+  interactive-deploy:
+    steps:
+      - name: confirm-and-deploy
+        job: confirm-deploy
+        targets:
+          - test-servers
+        limit: 1

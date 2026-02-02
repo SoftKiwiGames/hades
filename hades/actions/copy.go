@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/SoftKiwiGames/hades/hades/schema"
@@ -32,12 +33,18 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 	defer sess.Close()
 
 	// Determine source
-	var file *os.File
+	var reader io.ReadCloser
 	var srcDesc string
 
 	if a.Artifact != "" {
-		// TODO: In Phase 3, implement artifact retrieval
-		return fmt.Errorf("artifact copy not yet implemented (will be in Phase 3)")
+		// Get artifact from manager
+		art, err := runtime.ArtifactMgr.Get(a.Artifact)
+		if err != nil {
+			return fmt.Errorf("failed to get artifact %s: %w", a.Artifact, err)
+		}
+		defer art.Close()
+		reader = art
+		srcDesc = fmt.Sprintf("artifact:%s", a.Artifact)
 	} else if a.Src != "" {
 		// Read from local file
 		f, err := os.Open(a.Src)
@@ -45,7 +52,7 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 			return fmt.Errorf("failed to open source file %s: %w", a.Src, err)
 		}
 		defer f.Close()
-		file = f
+		reader = f
 		srcDesc = a.Src
 	} else {
 		return fmt.Errorf("either src or artifact must be specified")
@@ -53,7 +60,7 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 
 	// Copy file to remote host atomically
 	// Default mode 0644 for now
-	if err := sess.CopyFile(ctx, file, a.Dst, 0644); err != nil {
+	if err := sess.CopyFile(ctx, reader, a.Dst, 0644); err != nil {
 		return fmt.Errorf("failed to copy %s to %s: %w", srcDesc, a.Dst, err)
 	}
 

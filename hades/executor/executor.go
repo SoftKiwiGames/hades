@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/SoftKiwiGames/hades/hades/actions"
+	"github.com/SoftKiwiGames/hades/hades/artifacts"
 	"github.com/SoftKiwiGames/hades/hades/inventory"
 	"github.com/SoftKiwiGames/hades/hades/schema"
 	"github.com/SoftKiwiGames/hades/hades/ssh"
@@ -46,6 +48,10 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 	result := &Result{
 		StartTime: time.Now(),
 	}
+
+	// Create artifact manager for this run
+	artifactMgr := artifacts.NewManager()
+	defer artifactMgr.Clear()
 
 	fmt.Fprintf(e.stdout, "Starting plan: %s\n", planName)
 	fmt.Fprintf(e.stdout, "Run ID: %s\n\n", result.RunID)
@@ -94,11 +100,19 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 			mergedEnv[k] = v
 		}
 
+		// Load artifacts for this job if any are defined
+		if err := e.loadArtifacts(job, artifactMgr); err != nil {
+			result.Failed = true
+			result.FailedStep = step.Name
+			result.Error = fmt.Errorf("failed to load artifacts: %w", err)
+			return result, result.Error
+		}
+
 		// Execute job on each host (no parallelism yet - Phase 5)
 		for _, host := range hosts {
 			fmt.Fprintf(e.stdout, "[%s] Executing job %s\n", host.Name, step.Job)
 
-			if err := e.executeJob(ctx, job, planName, step.Targets[0], host, mergedEnv); err != nil {
+			if err := e.executeJob(ctx, job, planName, step.Targets[0], host, mergedEnv, artifactMgr); err != nil {
 				result.Failed = true
 				result.FailedStep = step.Name
 				result.FailedHost = host.Name
@@ -120,9 +134,9 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 	return result, nil
 }
 
-func (e *executor) executeJob(ctx context.Context, job *schema.Job, plan string, target string, host ssh.Host, env map[string]string) error {
+func (e *executor) executeJob(ctx context.Context, job *schema.Job, plan string, target string, host ssh.Host, env map[string]string, artifactMgr artifacts.Manager) error {
 	// Create runtime context
-	runtime := types.NewRuntime(e.sshClient, plan, target, host, env)
+	runtime := types.NewRuntime(e.sshClient, artifactMgr, plan, target, host, env)
 
 	// Execute each action sequentially
 	for i, actionSchema := range job.Actions {
@@ -147,10 +161,10 @@ func (e *executor) createAction(actionSchema *schema.Action) (actions.Action, er
 		return actions.NewCopyAction(actionSchema.Copy), nil
 	}
 	if actionSchema.Template != nil {
-		return nil, fmt.Errorf("template action not yet implemented (Phase 3)")
+		return actions.NewTemplateAction(actionSchema.Template), nil
 	}
 	if actionSchema.Mkdir != nil {
-		return nil, fmt.Errorf("mkdir action not yet implemented (Phase 3)")
+		return actions.NewMkdirAction(actionSchema.Mkdir), nil
 	}
 	if actionSchema.Push != nil {
 		return nil, fmt.Errorf("push action not yet implemented (Phase 4)")
@@ -159,10 +173,29 @@ func (e *executor) createAction(actionSchema *schema.Action) (actions.Action, er
 		return nil, fmt.Errorf("pull action not yet implemented (Phase 4)")
 	}
 	if actionSchema.Wait != nil {
-		return nil, fmt.Errorf("wait action not yet implemented (Phase 3)")
+		return actions.NewWaitAction(actionSchema.Wait), nil
 	}
 
 	return nil, fmt.Errorf("no action type specified")
+}
+
+func (e *executor) loadArtifacts(job *schema.Job, artifactMgr artifacts.Manager) error {
+	// Load artifacts defined in the job
+	for name, artifact := range job.Artifacts {
+		file, err := os.Open(artifact.Path)
+		if err != nil {
+			return fmt.Errorf("failed to open artifact %s at %s: %w", name, artifact.Path, err)
+		}
+		defer file.Close()
+
+		if err := artifactMgr.Store(name, file); err != nil {
+			return fmt.Errorf("failed to store artifact %s: %w", name, err)
+		}
+
+		fmt.Fprintf(e.stdout, "  Loaded artifact: %s from %s\n", name, artifact.Path)
+	}
+
+	return nil
 }
 
 func (e *executor) loadJob(file *schema.File, name string) (*schema.Job, error) {
@@ -174,6 +207,9 @@ func (e *executor) loadJob(file *schema.File, name string) (*schema.Job, error) 
 }
 
 func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.Plan, planName string, inv inventory.Inventory, targets []string, env map[string]string) error {
+	// Create artifact manager for dry-run (won't actually load artifacts)
+	artifactMgr := artifacts.NewManager()
+
 	fmt.Fprintf(e.stdout, "Dry-run: %s\n", planName)
 	fmt.Fprintf(e.stdout, "This will execute the following:\n\n")
 
@@ -213,7 +249,7 @@ func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.P
 
 		// Show actions for each host
 		for _, host := range hosts {
-			runtime := types.NewRuntime(e.sshClient, planName, step.Targets[0], host, mergedEnv)
+			runtime := types.NewRuntime(e.sshClient, artifactMgr, planName, step.Targets[0], host, mergedEnv)
 
 			fmt.Fprintf(e.stdout, "\n  [%s]\n", host.Name)
 			for _, actionSchema := range job.Actions {
