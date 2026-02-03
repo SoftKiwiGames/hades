@@ -1,0 +1,96 @@
+jobs:
+  # Job with required env vars
+  deploy:
+    env:
+      VERSION:              # Required (no default)
+      REGION:               # Required (no default)
+      MODE:
+        default: production # Optional (has default)
+    actions:
+      - run: echo "Deploying version ${VERSION} to ${REGION} in ${MODE} mode"
+      - run: mkdir -p /opt/app/${VERSION}
+
+  # Job with all optional env vars
+  configure:
+    env:
+      LOG_LEVEL:
+        default: info
+      MAX_CONNECTIONS:
+        default: "100"
+    actions:
+      - run: echo "Configuring with LOG_LEVEL=${LOG_LEVEL}"
+
+  # Job with no env vars
+  simple-task:
+    actions:
+      - run: echo "Running simple task"
+
+plans:
+  # Valid: All required vars provided
+  valid-deploy:
+    steps:
+      - name: deploy-app
+        job: deploy
+        targets: [test-servers]
+        env:
+          VERSION: v1.0.0
+          REGION: us-east-1
+
+  # Valid: Override default
+  valid-deploy-staging:
+    steps:
+      - name: deploy-app
+        job: deploy
+        targets: [test-servers]
+        env:
+          VERSION: v1.0.0
+          REGION: us-west-2
+          MODE: staging    # Override default
+
+  # Valid: CLI will provide required vars
+  cli-provided:
+    steps:
+      - name: deploy-app
+        job: deploy
+        targets: [test-servers]
+        # VERSION and REGION must be provided via CLI
+
+  # Valid: Optional vars use defaults
+  use-defaults:
+    steps:
+      - name: configure-app
+        job: configure
+        targets: [test-servers]
+        # LOG_LEVEL and MAX_CONNECTIONS will use defaults
+
+  # Invalid: Missing required var (VERSION)
+  missing-required:
+    steps:
+      - name: deploy-app
+        job: deploy
+        targets: [test-servers]
+        env:
+          REGION: us-east-1
+          # Missing VERSION - will fail validation
+
+  # Invalid: Unknown env var
+  unknown-var:
+    steps:
+      - name: deploy-app
+        job: deploy
+        targets: [test-servers]
+        env:
+          VERSION: v1.0.0
+          REGION: us-east-1
+          UNKNOWN_VAR: value  # Not defined in job - will fail
+
+  # Invalid: Try to set HADES_ var
+  hades-override:
+    steps:
+      - name: deploy-app
+        job: deploy
+        targets: [test-servers]
+        env:
+          VERSION: v1.0.0
+          REGION: us-east-1
+          HADES_RUN_ID: custom  # Cannot override HADES_* - will fail

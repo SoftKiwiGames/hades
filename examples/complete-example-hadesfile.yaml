@@ -1,0 +1,163 @@
+registries:
+  prod:
+    type: filesystem
+    path: /tmp/hades-registry
+
+jobs:
+  # Build job with strict env contract
+  build:
+    env:
+      VERSION:              # Required: semantic version
+      GIT_COMMIT:           # Required: commit hash
+      BUILD_NUMBER:         # Required: CI build number
+      BUILD_ENV:
+        default: ci         # Optional: where build runs
+    artifacts:
+      binary:
+        path: ./build/app
+    actions:
+      - run: echo "Building version ${VERSION} (${GIT_COMMIT})"
+      - run: echo "Build #${BUILD_NUMBER} in ${BUILD_ENV}"
+
+  # Publish job
+  publish:
+    env:
+      VERSION:              # Required
+    artifacts:
+      binary:
+        path: ./build/app
+    actions:
+      - push:
+          registry: prod
+          artifact: binary
+          name: myapp
+          tag: ${VERSION}
+
+  # Deploy job with environment-specific defaults
+  deploy:
+    env:
+      VERSION:              # Required: what to deploy
+      REGION:               # Required: where to deploy
+      MODE:
+        default: production # Optional: deployment mode
+      REPLICAS:
+        default: "3"        # Optional: instance count
+      HEALTH_CHECK:
+        default: "30s"      # Optional: health check timeout
+    actions:
+      - run: echo "Deploying ${VERSION} to ${REGION}"
+      - run: echo "Mode ${MODE} with ${REPLICAS} replicas"
+      - mkdir:
+          path: /opt/myapp/releases/${VERSION}
+          mode: 0755
+      - pull:
+          registry: prod
+          name: myapp
+          tag: ${VERSION}
+          to: /opt/myapp/releases/${VERSION}/app
+      - run: systemctl restart myapp
+
+  # Health check job (no env vars needed)
+  health-check:
+    actions:
+      - run: curl -sf http://localhost:8080/health
+      - run: systemctl is-active myapp
+
+  # Confirmation gate
+  confirm:
+    env:
+      STAGE:
+        default: deployment
+    actions:
+      - wait:
+          message: "Canary ${STAGE} successful. Continue?"
+          timeout: "5m"
+
+plans:
+  # CI/CD Pipeline: Build → Publish → Deploy
+  ci-deploy:
+    steps:
+      # Variables provided via CLI from CI system
+      - name: publish
+        job: publish
+        targets: [test-servers]
+        # VERSION provided via CLI
+
+      - name: deploy-canary
+        job: deploy
+        targets: [app-servers]
+        limit: 1
+        env:
+          REGION: us-east-1
+          MODE: production
+        # VERSION provided via CLI
+
+      - name: verify-canary
+        job: health-check
+        targets: [app-servers]
+        limit: 1
+
+      - name: approval-gate
+        job: confirm
+        targets: [app-servers]
+        limit: 1
+
+      - name: rollout
+        job: deploy
+        targets: [app-servers]
+        parallelism: "3"
+        env:
+          REGION: us-east-1
+        # VERSION and MODE use CLI values
+
+  # Development: fast iteration
+  dev-deploy:
+    steps:
+      - name: deploy
+        job: deploy
+        targets: [test-servers]
+        env:
+          REGION: us-west-2
+          MODE: development
+          REPLICAS: "1"
+          HEALTH_CHECK: "5s"
+        # VERSION provided via CLI
+
+  # Staging: realistic but faster
+  staging-deploy:
+    steps:
+      - name: deploy
+        job: deploy
+        targets: [test-servers]
+        parallelism: "2"
+        env:
+          REGION: us-west-2
+          MODE: staging
+          REPLICAS: "2"
+        # VERSION provided via CLI
+
+  # Multi-region production
+  multi-region-deploy:
+    steps:
+      # US East
+      - name: deploy-us-east-canary
+        job: deploy
+        targets: [app-servers]
+        limit: 1
+        env:
+          REGION: us-east-1
+
+      - name: verify-us-east
+        job: health-check
+        targets: [app-servers]
+        limit: 1
+
+      - name: deploy-us-east-all
+        job: deploy
+        targets: [app-servers]
+        parallelism: "40%"
+        env:
+          REGION: us-east-1
+
+      # Additional regions would use different target groups
+      # Simplified for demo purposes

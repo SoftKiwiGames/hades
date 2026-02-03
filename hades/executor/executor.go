@@ -11,6 +11,7 @@ import (
 	"github.com/SoftKiwiGames/hades/hades/actions"
 	"github.com/SoftKiwiGames/hades/hades/artifacts"
 	"github.com/SoftKiwiGames/hades/hades/inventory"
+	"github.com/SoftKiwiGames/hades/hades/loader"
 	"github.com/SoftKiwiGames/hades/hades/registry"
 	"github.com/SoftKiwiGames/hades/hades/rollout"
 	"github.com/SoftKiwiGames/hades/hades/schema"
@@ -102,14 +103,17 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 			return result, result.Error
 		}
 
-		// Merge env: CLI env + step env
-		mergedEnv := make(map[string]string)
-		for k, v := range env {
-			mergedEnv[k] = v
-		}
+		// Merge env with priority: CLI > step > job defaults
+		stepEnv := make(map[string]string)
 		for k, v := range step.Env {
-			mergedEnv[k] = v
+			stepEnv[k] = v
 		}
+		for k, v := range env {
+			stepEnv[k] = v // CLI overrides step
+		}
+
+		// Merge with job defaults
+		mergedEnv := loader.MergeEnv(job, stepEnv)
 
 		// Load artifacts for this job if any are defined
 		if err := e.loadArtifacts(job, artifactMgr); err != nil {
@@ -324,14 +328,17 @@ func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.P
 			return err
 		}
 
-		// Merge env
-		mergedEnv := make(map[string]string)
-		for k, v := range env {
-			mergedEnv[k] = v
-		}
+		// Merge env with priority: CLI > step > job defaults
+		stepEnv := make(map[string]string)
 		for k, v := range step.Env {
-			mergedEnv[k] = v
+			stepEnv[k] = v
 		}
+		for k, v := range env {
+			stepEnv[k] = v // CLI overrides step
+		}
+
+		// Merge with job defaults
+		mergedEnv := loader.MergeEnv(job, stepEnv)
 
 		// Show actions for each host
 		for _, host := range hosts {

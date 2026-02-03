@@ -101,6 +101,11 @@ func (h *Hades) runPlan(planName, hadesFile string, targets, envVars []string, i
 		return fmt.Errorf("failed to expand environment variables: %w", err)
 	}
 
+	// Validate environment variables against plan
+	if err := loader.ValidatePlanEnv(file, planName, expandedEnv); err != nil {
+		return fmt.Errorf("environment validation failed: %w", err)
+	}
+
 	// Load inventory
 	inv, err := inventory.LoadFile(inventoryPath)
 	if err != nil {
