@@ -3,6 +3,7 @@ package loader
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/SoftKiwiGames/hades/hades/schema"
 	"gopkg.in/yaml.v3"
@@ -27,6 +28,76 @@ func (l *Loader) LoadFile(path string) (*schema.File, error) {
 	}
 
 	return &file, nil
+}
+
+// LoadDirectory recursively walks a directory, finds all .yml and .yaml files,
+// and merges them into a single schema.File
+func (l *Loader) LoadDirectory(rootPath string) (*schema.File, error) {
+	merged := &schema.File{
+		Jobs:       make(map[string]schema.Job),
+		Plans:      make(map[string]schema.Plan),
+		Registries: make(schema.Registries),
+	}
+
+	err := filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories and non-YAML files
+		if d.IsDir() {
+			return nil
+		}
+
+		ext := filepath.Ext(path)
+		if ext != ".yml" && ext != ".yaml" {
+			return nil
+		}
+
+		// Load the file
+		file, err := l.LoadFile(path)
+		if err != nil {
+			// Skip files that don't parse - they may not be Hades config files
+			return nil
+		}
+
+		// Skip files that don't contain any Hades configuration
+		if len(file.Jobs) == 0 && len(file.Plans) == 0 && len(file.Registries) == 0 {
+			return nil
+		}
+
+		// Merge jobs
+		for name, job := range file.Jobs {
+			if _, exists := merged.Jobs[name]; exists {
+				return fmt.Errorf("duplicate job %q found in %s", name, path)
+			}
+			merged.Jobs[name] = job
+		}
+
+		// Merge plans
+		for name, plan := range file.Plans {
+			if _, exists := merged.Plans[name]; exists {
+				return fmt.Errorf("duplicate plan %q found in %s", name, path)
+			}
+			merged.Plans[name] = plan
+		}
+
+		// Merge registries
+		for name, reg := range file.Registries {
+			if _, exists := merged.Registries[name]; exists {
+				return fmt.Errorf("duplicate registry %q found in %s", name, path)
+			}
+			merged.Registries[name] = reg
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return merged, nil
 }
 
 // LoadJob retrieves a job by name from the file

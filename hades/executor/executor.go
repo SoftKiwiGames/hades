@@ -18,6 +18,7 @@ import (
 	"github.com/SoftKiwiGames/hades/hades/ssh"
 	"github.com/SoftKiwiGames/hades/hades/types"
 	"github.com/SoftKiwiGames/hades/hades/ui"
+	"github.com/wzshiming/ctc"
 )
 
 type Executor interface {
@@ -191,7 +192,7 @@ func (e *executor) executeBatch(ctx context.Context, job *schema.Job, plan strin
 		go func(h ssh.Host) {
 			defer wg.Done()
 
-			fmt.Fprintf(e.stdout, "[%s] Executing job...\n", h.Name)
+			fmt.Fprintf(e.stdout, "%s[%s]%s Executing job...\n", ctc.ForegroundGreen, h.Name, ctc.Reset)
 
 			err := e.executeJob(ctx, job, plan, target, h, env, artifactMgr, registryMgr)
 

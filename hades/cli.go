@@ -46,11 +46,10 @@ func (h *Hades) Run() {
 
 func (h *Hades) buildRunCommand() *cobra.Command {
 	var (
-		hadesFile  string
-		targets    []string
-		envVars    []string
-		dryRun     bool
-		inventory  string
+		configDir string
+		targets   []string
+		envVars   []string
+		dryRun    bool
 	)
 
 	cmd := &cobra.Command{
@@ -59,24 +58,23 @@ func (h *Hades) buildRunCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			planName := args[0]
-			return h.runPlan(planName, hadesFile, targets, envVars, inventory, dryRun)
+			return h.runPlan(planName, configDir, targets, envVars, dryRun)
 		},
 	}
 
-	cmd.Flags().StringVarP(&hadesFile, "file", "f", "hadesfile.yaml", "Path to hadesfile")
+	cmd.Flags().StringVarP(&configDir, "config-dir", "c", ".", "Directory to search for YAML config files (default: current directory)")
 	cmd.Flags().StringSliceVarP(&targets, "target", "t", nil, "Target groups to execute on")
 	cmd.Flags().StringSliceVarP(&envVars, "env", "e", nil, "Environment variables (KEY=VALUE)")
-	cmd.Flags().StringVarP(&inventory, "inventory", "i", "inventory.yaml", "Path to inventory file")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be executed without running")
 
 	return cmd
 }
 
-func (h *Hades) runPlan(planName, hadesFile string, targets, envVars []string, inventoryPath string, dryRun bool) error {
-	// Load and parse the hadesfile
-	file, err := h.loader.LoadFile(hadesFile)
+func (h *Hades) runPlan(planName, configDir string, targets, envVars []string, dryRun bool) error {
+	// Load and merge all YAML files from the config directory
+	file, err := h.loader.LoadDirectory(configDir)
 	if err != nil {
-		return fmt.Errorf("failed to load hadesfile: %w", err)
+		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// Validate the file structure
@@ -107,8 +105,8 @@ func (h *Hades) runPlan(planName, hadesFile string, targets, envVars []string, i
 		return fmt.Errorf("environment validation failed: %w", err)
 	}
 
-	// Load inventory
-	inv, err := inventory.LoadFile(inventoryPath)
+	// Load inventory from the same config directory
+	inv, err := inventory.LoadDirectory(configDir)
 	if err != nil {
 		return fmt.Errorf("failed to load inventory: %w", err)
 	}

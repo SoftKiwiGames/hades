@@ -3,6 +3,7 @@ package inventory
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/SoftKiwiGames/hades/hades/ssh"
 	"gopkg.in/yaml.v3"
@@ -14,15 +15,14 @@ type fileInventory struct {
 }
 
 type inventoryFile struct {
-	Hosts   []hostDef              `yaml:"hosts"`
-	Targets map[string][]string    `yaml:"targets"`
+	Hosts   map[string]hostDef  `yaml:"hosts"`
+	Targets map[string][]string `yaml:"targets"`
 }
 
 type hostDef struct {
-	Name    string `yaml:"name"`
-	Addr    string `yaml:"addr"`
-	User    string `yaml:"user"`
-	Key     string `yaml:"key"`
+	Addr         string `yaml:"addr"`
+	User         string `yaml:"user"`
+	IdentityFile string `yaml:"identity_file"`
 }
 
 func LoadFile(path string) (Inventory, error) {
@@ -37,19 +37,92 @@ func LoadFile(path string) (Inventory, error) {
 	}
 
 	// Convert host definitions to ssh.Host
-	hosts := make([]ssh.Host, len(file.Hosts))
-	for i, h := range file.Hosts {
-		hosts[i] = ssh.Host{
-			Name:    h.Name,
+	var hosts []ssh.Host
+	for name, h := range file.Hosts {
+		hosts = append(hosts, ssh.Host{
+			Name:    name,
 			Address: h.Addr,
 			User:    h.User,
-			KeyPath: h.Key,
-		}
+			KeyPath: h.IdentityFile,
+		})
 	}
 
 	return &fileInventory{
 		hosts:   hosts,
 		targets: file.Targets,
+	}, nil
+}
+
+// LoadDirectory recursively walks a directory, finds all .yml and .yaml files,
+// and merges them into a single inventory
+func LoadDirectory(rootPath string) (Inventory, error) {
+	allHosts := make(map[string]ssh.Host)
+	allTargets := make(map[string][]string)
+
+	err := filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories and non-YAML files
+		if d.IsDir() {
+			return nil
+		}
+
+		ext := filepath.Ext(path)
+		if ext != ".yml" && ext != ".yaml" {
+			return nil
+		}
+
+		// Load the file
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", path, err)
+		}
+
+		var file inventoryFile
+		if err := yaml.Unmarshal(data, &file); err != nil {
+			// Skip files that don't parse as inventory
+			return nil
+		}
+
+		// Merge hosts
+		for name, h := range file.Hosts {
+			if _, exists := allHosts[name]; exists {
+				return fmt.Errorf("duplicate host %q found in %s", name, path)
+			}
+			allHosts[name] = ssh.Host{
+				Name:    name,
+				Address: h.Addr,
+				User:    h.User,
+				KeyPath: h.IdentityFile,
+			}
+		}
+
+		// Merge targets
+		for name, hostList := range file.Targets {
+			if _, exists := allTargets[name]; exists {
+				return fmt.Errorf("duplicate target %q found in %s", name, path)
+			}
+			allTargets[name] = hostList
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert map to slice for hosts
+	hosts := make([]ssh.Host, 0, len(allHosts))
+	for _, h := range allHosts {
+		hosts = append(hosts, h)
+	}
+
+	return &fileInventory{
+		hosts:   hosts,
+		targets: allTargets,
 	}, nil
 }
 
