@@ -6,6 +6,7 @@ test:
 build:
 	mkdir -p build/
 	CGO_ENABLED=0 go build -o build/hades
+	cp build/hades ~/bin/hades
 
 .PHONY: init
 init:
