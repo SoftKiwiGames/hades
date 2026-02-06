@@ -32,27 +32,27 @@ func (o *Output) Section(text string) {
 }
 
 // Info prints an informational message
-func (o *Output) Info(format string, args ...interface{}) {
+func (o *Output) Info(format string, args ...any) {
 	fmt.Fprintf(o.stdout, format+"\n", args...)
 }
 
 // Success prints a success message with checkmark
-func (o *Output) Success(format string, args ...interface{}) {
+func (o *Output) Success(format string, args ...any) {
 	fmt.Fprintf(o.stdout, "✓ "+format+"\n", args...)
 }
 
 // Error prints an error message
-func (o *Output) Error(format string, args ...interface{}) {
+func (o *Output) Error(format string, args ...any) {
 	fmt.Fprintf(o.stderr, "✗ "+format+"\n", args...)
 }
 
 // Warning prints a warning message
-func (o *Output) Warning(format string, args ...interface{}) {
+func (o *Output) Warning(format string, args ...any) {
 	fmt.Fprintf(o.stdout, "⚠ "+format+"\n", args...)
 }
 
 // HostLog prints a host-specific log message
-func (o *Output) HostLog(host, format string, args ...interface{}) {
+func (o *Output) HostLog(host, format string, args ...any) {
 	timestamp := time.Now().Format("15:04:05")
 	message := fmt.Sprintf(format, args...)
 	fmt.Fprintf(o.stdout, "[%s] [%s] %s\n", timestamp, host, message)

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/SoftKiwiGames/hades/hades/ssh"
+	"github.com/SoftKiwiGames/hades/hades/utils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -69,8 +70,7 @@ func LoadDirectory(rootPath string) (Inventory, error) {
 			return nil
 		}
 
-		ext := filepath.Ext(path)
-		if ext != ".yml" && ext != ".yaml" {
+		if !utils.FileHasValidExtension(path) {
 			return nil
 		}
 

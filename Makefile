@@ -1,12 +1,12 @@
-.PHONY: test
-test:
-	go test -v ./...
-
 .PHONY: build
 build:
 	mkdir -p build/
 	CGO_ENABLED=0 go build -o build/hades
 	cp build/hades ~/bin/hades
+
+.PHONY: test
+test:
+	go test -v ./...
 
 .PHONY: init
 init:

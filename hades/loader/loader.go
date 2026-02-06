@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/SoftKiwiGames/hades/hades/schema"
+	"github.com/SoftKiwiGames/hades/hades/utils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -49,8 +50,7 @@ func (l *Loader) LoadDirectory(rootPath string) (*schema.File, error) {
 			return nil
 		}
 
-		ext := filepath.Ext(path)
-		if ext != ".yml" && ext != ".yaml" {
+		if !utils.FileHasValidExtension(path) {
 			return nil
 		}
 
@@ -111,6 +111,7 @@ func (l *Loader) LoadJob(file *schema.File, name string) (*schema.Job, error) {
 
 // LoadPlan retrieves a plan by name from the file
 func (l *Loader) LoadPlan(file *schema.File, name string) (*schema.Plan, error) {
+	fmt.Println(file.Plans)
 	plan, ok := file.Plans[name]
 	if !ok {
 		return nil, fmt.Errorf("plan %q not found", name)

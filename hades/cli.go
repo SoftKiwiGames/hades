@@ -11,6 +11,7 @@ import (
 	"github.com/SoftKiwiGames/hades/hades/loader"
 	"github.com/SoftKiwiGames/hades/hades/ssh"
 	"github.com/spf13/cobra"
+	"github.com/wzshiming/ctc"
 )
 
 type Hades struct {
@@ -39,7 +40,7 @@ func (h *Hades) Run() {
 	rootCmd.AddCommand(runCmd)
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(h.stderr, "Error: %v\n", err)
+		fmt.Fprintf(h.stderr, "%sError:%s %v\n", ctc.ForegroundRed, ctc.Reset, err)
 		os.Exit(1)
 	}
 }
