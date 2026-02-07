@@ -7,7 +7,6 @@ import (
 	"github.com/SoftKiwiGames/hades/hades/artifacts"
 	"github.com/SoftKiwiGames/hades/hades/registry"
 	"github.com/SoftKiwiGames/hades/hades/ssh"
-	"github.com/google/uuid"
 )
 
 type Runtime struct {
@@ -26,8 +25,7 @@ type Runtime struct {
 	ActionDesc     string    // For formatted console messages
 }
 
-func NewRuntime(sshClient ssh.Client, artifactMgr artifacts.Manager, registryMgr registry.Manager, plan string, target string, host ssh.Host, userEnv map[string]string, stdout, stderr io.Writer, consoleStdout, consoleStderr io.Writer) *Runtime {
-	runID := uuid.New().String()
+func NewRuntime(sshClient ssh.Client, artifactMgr artifacts.Manager, registryMgr registry.Manager, runID string, plan string, target string, host ssh.Host, userEnv map[string]string, stdout, stderr io.Writer, consoleStdout, consoleStderr io.Writer) *Runtime {
 
 	// Build environment with HADES_* built-ins
 	env := make(map[string]string)

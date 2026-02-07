@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"text/template"
 
 	"github.com/SoftKiwiGames/hades/hades/schema"
@@ -47,6 +48,16 @@ func (a *TemplateAction) Execute(ctx context.Context, runtime *types.Runtime) er
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	// Write rendered template to intermediate file for inspection
+	// Structure: logs/<runID>/rendered/<hostName>/<templatePath>
+	renderedPath := filepath.Join("logs", runtime.RunID, "rendered", runtime.Host.Name, a.Src)
+	if err := os.MkdirAll(filepath.Dir(renderedPath), 0755); err != nil {
+		return fmt.Errorf("failed to create rendered directory: %w", err)
+	}
+	if err := os.WriteFile(renderedPath, buf.Bytes(), 0644); err != nil {
+		return fmt.Errorf("failed to write rendered template: %w", err)
 	}
 
 	// Create SSH session
