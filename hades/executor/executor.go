@@ -12,6 +12,7 @@ import (
 	"github.com/SoftKiwiGames/hades/hades/actions"
 	"github.com/SoftKiwiGames/hades/hades/artifacts"
 	"github.com/SoftKiwiGames/hades/hades/inventory"
+	"github.com/SoftKiwiGames/hades/hades/live"
 	"github.com/SoftKiwiGames/hades/hades/loader"
 	"github.com/SoftKiwiGames/hades/hades/logger"
 	"github.com/SoftKiwiGames/hades/hades/registry"
@@ -20,11 +21,12 @@ import (
 	"github.com/SoftKiwiGames/hades/hades/ssh"
 	"github.com/SoftKiwiGames/hades/hades/types"
 	"github.com/SoftKiwiGames/hades/hades/ui"
+	"github.com/hekmon/liveterm/v2"
 	"github.com/wzshiming/ctc"
 )
 
 type Executor interface {
-	ExecutePlan(ctx context.Context, file *schema.File, plan *schema.Plan, planName string, inv inventory.Inventory, targets []string, env map[string]string) (*Result, error)
+	ExecutePlan(ctx context.Context, file *schema.File, plan *schema.Plan, planName string, inv inventory.Inventory, targets []string, env map[string]string, follow bool) (*Result, error)
 	DryRun(ctx context.Context, file *schema.File, plan *schema.Plan, planName string, inv inventory.Inventory, targets []string, env map[string]string) error
 }
 
@@ -54,7 +56,15 @@ func New(sshClient ssh.Client, stdout, stderr io.Writer) Executor {
 	}
 }
 
-func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *schema.Plan, planName string, inv inventory.Inventory, targets []string, env map[string]string) (*Result, error) {
+func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *schema.Plan, planName string, inv inventory.Inventory, targets []string, env map[string]string, follow bool) (*Result, error) {
+	if !follow {
+		liveterm.RefreshInterval = 100 * time.Millisecond
+		liveterm.Output = os.Stdout
+		liveterm.SetSingleLineUpdateFx(live.Render)
+		liveterm.Start()
+	}
+	defer liveterm.Stop(false)
+
 	result := &Result{
 		StartTime: time.Now(),
 	}
@@ -75,6 +85,7 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 	result.RunID = "hades-" + time.Now().Format("20060102-150405")
 
 	e.ui.PlanStarted(planName, result.RunID)
+	live.UIPlanStarted(planName, result.RunID, result.StartTime)
 
 	// Execute each step sequentially
 	for i, step := range plan.Steps {
@@ -111,15 +122,21 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 			allHosts = allHosts[:step.Limit]
 		}
 
+		hostNames := []string{}
+		for _, h := range allHosts {
+			hostNames = append(hostNames, h.Name)
+		}
+		live.SetHosts(hostNames)
+
 		totalHosts := len(allHosts)
 
 		e.ui.StepProgress(i+1, len(plan.Steps), step.Name)
 		e.ui.Info("  Job: %s", step.Job)
 		targetsStr := strings.Join(stepTargets, ", ")
 		e.ui.Info("  Targets: %s", targetsStr)
-		fmt.Fprintf(e.stdout, "  Hosts: %d\n", totalHosts)
-		fmt.Fprintf(e.stdout, "  Status: %s□%s Started\n", ctc.ForegroundYellow, ctc.Reset)
-		fmt.Fprintf(e.stdout, "  Started: %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+		live.Fprintf(live.UpdateStep(), e.stdout, "  Hosts: %d\n", totalHosts)
+		live.Fprintf(live.UpdateStep(), e.stdout, "  Status: %s□%s Started\n", ctc.ForegroundYellow, ctc.Reset)
+		live.Fprintf(live.UpdateStep(), e.stdout, "  Started: %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
 
 		// Load job once for this step
 		job, err := e.loadJob(file, step.Job)
@@ -189,7 +206,7 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 		}
 
 		// Step completion
-		fmt.Fprintf(e.stdout, "\n  Status: %s■%s Completed\n\n", ctc.ForegroundGreen, ctc.Reset)
+		live.Fprintf(live.UpdateStep(), e.stdout, "\n  Status: %s■%s Completed\n\n", ctc.ForegroundGreen, ctc.Reset)
 	}
 
 	result.EndTime = time.Now()
@@ -217,9 +234,9 @@ func (e *executor) executeBatch(ctx context.Context, job *schema.Job, jobName st
 			err := e.executeJob(ctx, job, jobName, runID, plan, target, h, env, artifactMgr, registryMgr)
 
 			if err != nil {
-				fmt.Fprintf(e.stderr, "[%s] %s◆%s Job %q: failed - %v\n", h.Name, ctc.ForegroundRed, ctc.Reset, jobName, err)
+				live.Fprintf(live.UpdateTarget(h.Name), e.stderr, "[%s] %s◆%s Job %q: failed - %v\n", h.Name, ctc.ForegroundRed, ctc.Reset, jobName, err)
 			} else {
-				fmt.Fprintf(e.stdout, "[%s] %s◆%s Job %q: completed\n", h.Name, ctc.ForegroundGreen, ctc.Reset, jobName)
+				live.Fprintf(live.UpdateTarget(h.Name), e.stdout, "[%s] %s◆%s Job %q: completed\n", h.Name, ctc.ForegroundGreen, ctc.Reset, jobName)
 			}
 
 			resultChan <- result{host: h, err: err}
@@ -263,13 +280,13 @@ func (e *executor) executeJob(ctx context.Context, job *schema.Job, jobName stri
 
 		if !result.Pass {
 			// Console: Job skipped
-			fmt.Fprintf(e.stdout, "[%s] %s◇%s Job %q: skipped (guard failed)\n", host.Name, ctc.ForegroundBlue, ctc.Reset, jobName)
+			live.Fprintf(live.UpdateTarget(host.Name), e.stdout, "[%s] %s◇%s Job %q: skipped (guard failed)\n", host.Name, ctc.ForegroundBlue, ctc.Reset, jobName)
 			return nil // Skip job, but not an error
 		}
 	}
 
 	// Console: Job starting (only if guard passed or no guard)
-	fmt.Fprintf(e.stdout, "[%s] %s◇%s Job %q: starting\n", host.Name, ctc.ForegroundYellow, ctc.Reset, jobName)
+	live.Fprintf(live.UpdateTarget(host.Name), e.stdout, "[%s] %s◇%s Job %q: starting\n", host.Name, ctc.ForegroundYellow, ctc.Reset, jobName)
 
 	// Execute each action sequentially
 	for i, actionSchema := range job.Actions {
@@ -291,7 +308,7 @@ func (e *executor) executeJob(ctx context.Context, job *schema.Job, jobName stri
 		}
 
 		// Console: Action starting
-		fmt.Fprintf(e.stdout, "[%s] %s◌%s Action %s: in progress\n", host.Name, ctc.ForegroundYellow, ctc.Reset, actionDesc)
+		live.Fprintf(live.UpdateTarget(host.Name), e.stdout, "[%s] %s◌%s Action %s: in progress\n", host.Name, ctc.ForegroundYellow, ctc.Reset, actionDesc)
 
 		action, err := e.createAction(&actionSchema, hostLogger)
 		if err != nil {
@@ -300,12 +317,12 @@ func (e *executor) executeJob(ctx context.Context, job *schema.Job, jobName stri
 
 		if err := action.Execute(ctx, runtime); err != nil {
 			// Console: Action failed
-			fmt.Fprintf(e.stderr, "[%s] %s●%s Action %s: failed - %v\n", host.Name, ctc.ForegroundRed, ctc.Reset, actionDesc, err)
+			live.Fprintf(live.UpdateTarget(host.Name), e.stderr, "[%s] %s●%s Action %s: failed - %v\n", host.Name, ctc.ForegroundRed, ctc.Reset, actionDesc, err)
 			return fmt.Errorf("action %d failed: %w", i, err)
 		}
 
 		// Console: Action completed
-		fmt.Fprintf(e.stdout, "[%s] %s●%s Action %s: completed\n", host.Name, ctc.ForegroundGreen, ctc.Reset, actionDesc)
+		live.Fprintf(live.UpdateTarget(host.Name), e.stdout, "[%s] %s●%s Action %s: completed\n", host.Name, ctc.ForegroundGreen, ctc.Reset, actionDesc)
 	}
 
 	return nil
@@ -416,9 +433,9 @@ func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.P
 			stepTargets = targets
 		}
 
-		fmt.Fprintf(e.stdout, "Step %d: %s\n", i+1, step.Name)
-		fmt.Fprintf(e.stdout, "  Job: %s\n", step.Job)
-		fmt.Fprintf(e.stdout, "  Targets: %s\n", strings.Join(stepTargets, ", "))
+		live.Fprintf(live.UpdateStep(), e.stdout, "Step %d: %s\n", i+1, step.Name)
+		live.Fprintf(live.UpdateStep(), e.stdout, "  Job: %s\n", step.Job)
+		live.Fprintf(live.UpdateStep(), e.stdout, "  Targets: %s\n", strings.Join(stepTargets, ", "))
 
 		// Resolve hosts and deduplicate
 		uniqueHosts := make(map[string]ssh.Host) // keyed by host name
