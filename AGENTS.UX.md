@@ -57,30 +57,31 @@ Jobs are collections of actions executed on a host.
 [web-02] ◇ Job "install-postgres": skipped (guard failed)
 ```
 
-### Targets (Plan Execution per Target)
+### Steps
 
-Targets are groups of hosts. Each target shows when execution starts and completes on all its hosts.
+Steps are the top-level execution units in a plan. Each step shows its status, targets, and timestamp.
 
 | State | Symbol | Color | Format |
 |-------|--------|-------|--------|
-| Started | `□` | Yellow | `□ Target "name": started (N hosts)` |
-| Completed | `■` | Green | `■ Target "name": completed (N hosts)` |
-| Failed | `■` | Red | `■ Target "name": failed` |
+| Started | `□` | Yellow | `Status: □ Started` |
+| Completed | `■` | Green | `Status: ■ Completed` |
+| Failed | `■` | Red | `Status: ■ Failed` |
 
 **Examples:**
 ```
-□ Target "web-servers": started (3 hosts)
+Step 1/2: Deploy to production
+  Job: deploy-app
+  Targets: web-servers, api-servers
+  Status: □ Started
+  Started: 2026-02-07 10:45:32
 
-[web-01] ◇ Job "deploy": starting
-[web-01] ◆ Job "deploy": completed
+[web-01] ◇ Job "deploy-app": starting
+[web-01] ◆ Job "deploy-app": completed
 
-[web-02] ◇ Job "deploy": starting
-[web-02] ◆ Job "deploy": completed
+[api-01] ◇ Job "deploy-app": starting
+[api-01] ◆ Job "deploy-app": completed
 
-[web-03] ◇ Job "deploy": starting
-[web-03] ◆ Job "deploy": completed
-
-■ Target "web-servers": completed (3 hosts)
+  Status: ■ Completed
 ```
 
 ## Color Coding
@@ -156,43 +157,67 @@ Always use `ctc.Reset` after the symbol to prevent color bleeding.
 
 ### Target Messages
 
-**Format:**
-```
-SYMBOL Target "target-name": state (N hosts)
-```
+**Note:** Targets are displayed in the step header only. No separate target lifecycle messages are shown. Target groups are listed in the `Targets:` field of each step, and execution progresses directly to job/action level output.
 
-**Components:**
-- `SYMBOL`: Lifecycle symbol with color (no hostname prefix for targets)
-- `Target`: Literal word "Target"
-- `"target-name"`: Quoted target group name
-- `state`: Lifecycle state (started, completed, failed)
-- `(N hosts)`: Host count in parentheses
-
-**Examples:**
+**Example:**
 ```
-□ Target "web-servers": started (3 hosts)
-■ Target "web-servers": completed (3 hosts)
-■ Target "db-servers": failed
+Step 1/1: Deploy
+  Job: install-app
+  Targets: web-servers, db-servers, api-servers
+  Status: □ Started
+  Started: 2026-02-07 10:45:32
+
+[web-01] ◇ Job "install-app": starting
+[web-01] ◆ Job "install-app": completed
+
+[db-01] ◇ Job "install-app": starting
+[db-01] ◆ Job "install-app": completed
+
+  Status: ■ Completed
 ```
 
 ### Step Messages
 
 **Format:**
 ```
-✓ Step completed: step-name
-  Targets: target1, target2 (N hosts)
+Step N/M: step-name
+  Job: job-name
+  Targets: target1, target2
+  Status: SYMBOL state
+  Started: YYYY-MM-DD HH:MM:SS
 ```
+
+**Components:**
+- `Step N/M`: Step number and total count
+- `Job`: Job name to execute
+- `Targets`: Comma-separated list of target groups
+- `Status`: Step status with symbol (□ Started, ■ Completed, ■ Failed)
+- `Started`: Timestamp when step began (format: 2006-01-02 15:04:05)
 
 **Examples:**
 ```
 Step 1/2: Deploy to production
   Job: install-app
   Targets: web-servers, api-servers
+  Status: □ Started
+  Started: 2026-02-07 10:45:32
 
 (execution happens here)
 
-✓ Step completed: Deploy to production
-  Targets: web-servers, api-servers (5 hosts)
+  Status: ■ Completed
+```
+
+**Failed Step:**
+```
+Step 2/2: Database migration
+  Job: migrate-db
+  Targets: db-servers
+  Status: □ Started
+  Started: 2026-02-07 10:46:15
+
+(execution with errors)
+
+  Status: ■ Failed
 ```
 
 ### Plan Messages
@@ -218,11 +243,11 @@ Duration: X.Xs
 
 Terminal receives:
 - Plan start/completion
-- Step progress
-- Target start/completion (per target group)
+- Step header with status and timestamp
 - Job lifecycle (per host)
 - Action lifecycle (per host)
 - Skip messages with action format
+- Step completion status
 
 Terminal shows **status and lifecycle**, not command output.
 
@@ -320,15 +345,14 @@ Started: 2026-02-07T10:45:32+01:00
 Step 1/1: Deploy application
   Job: install-app
   Targets: web-servers
-
-□ Target "web-servers": started (2 hosts)
+  Status: □ Started
+  Started: 2026-02-07 10:45:32
 
 [web-01] ◇ Job "install-app": starting
 [web-01] ◌ Action [0] run (install): in progress
 [web-01] ● Action [0] run (install): completed
 [web-01] ◌ Action [1] copy (config): in progress
 [web-01] ○ Action [1] copy (config): skipped (/etc/app.conf already up to date)
-[web-01] ● Action [1] copy (config): completed
 [web-01] ◆ Job "install-app": completed
 
 [web-02] ◇ Job "install-app": starting
@@ -338,10 +362,7 @@ Step 1/1: Deploy application
 [web-02] ● Action [1] copy (config): completed
 [web-02] ◆ Job "install-app": completed
 
-■ Target "web-servers": completed (2 hosts)
-
-✓ Step completed: Deploy application
-  Targets: web-servers (2 hosts)
+  Status: ■ Completed
 
 ✓ Plan completed successfully
 Duration: 12.5s
@@ -350,26 +371,37 @@ Duration: 12.5s
 ### Failed Deployment
 
 ```
-□ Target "web-servers": started (2 hosts)
+Step 1/1: Deploy application
+  Job: install-app
+  Targets: web-servers
+  Status: □ Started
+  Started: 2026-02-07 10:45:32
 
 [web-01] ◇ Job "install-app": starting
 [web-01] ◌ Action [0] run: in progress
 [web-01] ● Action [0] run: failed - command execution failed: exit status 127
 [web-01] ◆ Job "install-app": failed - action 0 failed: command execution failed
 
-■ Target "web-servers": failed
-
-✗ Step failed: Deploy application
+  Status: ■ Failed
 ```
 
 ### Skipped Job (Guard)
 
 ```
+Step 1/1: Install Caddy
+  Job: install-caddy
+  Targets: web-servers
+  Status: □ Started
+  Started: 2026-02-07 10:45:32
+
 [web-01] ◇ Job "install-caddy": skipped (guard failed)
+
 [web-02] ◇ Job "install-caddy": starting
 [web-02] ◌ Action [0] run: in progress
 [web-02] ● Action [0] run: completed
 [web-02] ◆ Job "install-caddy": completed
+
+  Status: ■ Completed
 ```
 
 ## Code Locations
