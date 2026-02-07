@@ -110,8 +110,8 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 	if exists && localChecksum == remoteChecksum {
 		// SKIP: Checksums match - file is identical
 		dotYellow := fmt.Sprint(ctc.ForegroundYellow, "⏺", ctc.Reset)
-		fmt.Printf("[%s] %s Skipping %s (already up to date)\n",
-			runtime.Host.Name, dotYellow, a.Dst)
+		fmt.Fprintf(runtime.Stdout, "%s Skipping %s (already up to date)\n",
+			dotYellow, a.Dst)
 		return nil
 	}
 

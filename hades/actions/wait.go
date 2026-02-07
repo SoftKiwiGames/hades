@@ -45,7 +45,7 @@ func (a *WaitAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 
 	// Start goroutine to read user input
 	go func() {
-		fmt.Printf("\n⏸️  %s [y/N]: ", message)
+		fmt.Fprintf(runtime.Stdout, "\n⏸️  %s [y/N]: ", message)
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {

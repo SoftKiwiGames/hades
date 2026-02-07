@@ -3,8 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
 
 	"github.com/SoftKiwiGames/hades/hades/schema"
 	"github.com/SoftKiwiGames/hades/hades/types"
@@ -12,22 +10,11 @@ import (
 
 type RunAction struct {
 	Command string
-	Output  io.Writer
-	ErrOut  io.Writer
 }
 
-func NewRunAction(action *schema.ActionRun, stdout, stderr io.Writer) Action {
-	if stdout == nil {
-		stdout = os.Stdout
-	}
-	if stderr == nil {
-		stderr = os.Stderr
-	}
-
+func NewRunAction(action *schema.ActionRun) Action {
 	return &RunAction{
 		Command: string(*action),
-		Output:  stdout,
-		ErrOut:  stderr,
 	}
 }
 
@@ -44,8 +31,8 @@ func (a *RunAction) Execute(ctx context.Context, runtime *types.Runtime) error {
 	// TODO: In Phase 6, properly inject environment variables
 	cmd := a.Command
 
-	// Execute command
-	if err := sess.Run(ctx, cmd, a.Output, a.ErrOut); err != nil {
+	// Execute command - use runtime's stdout/stderr to ensure output goes to logs
+	if err := sess.Run(ctx, cmd, runtime.Stdout, runtime.Stderr); err != nil {
 		return fmt.Errorf("command execution failed: %w", err)
 	}
 

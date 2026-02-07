@@ -1,7 +1,6 @@
 package actions
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -32,10 +31,9 @@ func (a *MkdirAction) Execute(ctx context.Context, runtime *types.Runtime) error
 	// Build mkdir command with mode
 	cmd := fmt.Sprintf("mkdir -p %s && chmod %o %s", a.Path, a.Mode, a.Path)
 
-	// Execute command
-	var stdout, stderr bytes.Buffer
-	if err := sess.Run(ctx, cmd, &stdout, &stderr); err != nil {
-		return fmt.Errorf("mkdir command failed: %w\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
+	// Execute command - use runtime's writers to log output
+	if err := sess.Run(ctx, cmd, runtime.Stdout, runtime.Stderr); err != nil {
+		return fmt.Errorf("mkdir command failed: %w", err)
 	}
 
 	return nil

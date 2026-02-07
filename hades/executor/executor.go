@@ -12,6 +12,7 @@ import (
 	"github.com/SoftKiwiGames/hades/hades/artifacts"
 	"github.com/SoftKiwiGames/hades/hades/inventory"
 	"github.com/SoftKiwiGames/hades/hades/loader"
+	"github.com/SoftKiwiGames/hades/hades/logger"
 	"github.com/SoftKiwiGames/hades/hades/registry"
 	"github.com/SoftKiwiGames/hades/hades/rollout"
 	"github.com/SoftKiwiGames/hades/hades/schema"
@@ -154,7 +155,7 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 			}
 
 			// Execute batch in parallel
-			if err := e.executeBatch(ctx, job, planName, step.Targets[0], batch, mergedEnv, artifactMgr, registryMgr); err != nil {
+			if err := e.executeBatch(ctx, job, step.Job, result.RunID, planName, step.Targets[0], batch, mergedEnv, artifactMgr, registryMgr); err != nil {
 				result.Failed = true
 				result.FailedStep = step.Name
 				result.Error = err
@@ -176,7 +177,7 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 	return result, nil
 }
 
-func (e *executor) executeBatch(ctx context.Context, job *schema.Job, plan string, target string, hosts []ssh.Host, env map[string]string, artifactMgr artifacts.Manager, registryMgr registry.Manager) error {
+func (e *executor) executeBatch(ctx context.Context, job *schema.Job, jobName string, runID string, plan string, target string, hosts []ssh.Host, env map[string]string, artifactMgr artifacts.Manager, registryMgr registry.Manager) error {
 	// Use channels to coordinate parallel execution
 	type result struct {
 		host ssh.Host
@@ -194,12 +195,12 @@ func (e *executor) executeBatch(ctx context.Context, job *schema.Job, plan strin
 
 			fmt.Fprintf(e.stdout, "%s[%s]%s Executing job...\n", ctc.ForegroundGreen, h.Name, ctc.Reset)
 
-			err := e.executeJob(ctx, job, plan, target, h, env, artifactMgr, registryMgr)
+			err := e.executeJob(ctx, job, jobName, runID, plan, target, h, env, artifactMgr, registryMgr)
 
 			if err != nil {
-				fmt.Fprintf(e.stderr, "[%s] ✗ Job failed: %v\n", h.Name, err)
+				fmt.Fprintf(e.stderr, "[%s] %s⏺%s Job failed: %v\n", h.Name, ctc.ForegroundRed, ctc.Reset, err)
 			} else {
-				fmt.Fprintf(e.stdout, "[%s] ✓ Job completed\n", h.Name)
+				fmt.Fprintf(e.stdout, "[%s] %s⏺%s Job completed\n", h.Name, ctc.ForegroundGreen, ctc.Reset)
 			}
 
 			resultChan <- result{host: h, err: err}
@@ -223,9 +224,16 @@ func (e *executor) executeBatch(ctx context.Context, job *schema.Job, plan strin
 	return nil
 }
 
-func (e *executor) executeJob(ctx context.Context, job *schema.Job, plan string, target string, host ssh.Host, env map[string]string, artifactMgr artifacts.Manager, registryMgr registry.Manager) error {
-	// Create runtime context
-	runtime := types.NewRuntime(e.sshClient, artifactMgr, registryMgr, plan, target, host, env)
+func (e *executor) executeJob(ctx context.Context, job *schema.Job, jobName string, runID string, plan string, target string, host ssh.Host, env map[string]string, artifactMgr artifacts.Manager, registryMgr registry.Manager) error {
+	// Create logger for this host
+	hostLogger, err := logger.New(runID, plan, host.Name, e.stdout, e.stderr)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger for host %s: %w", host.Name, err)
+	}
+	defer hostLogger.Close()
+
+	// Create runtime context with logger writers
+	runtime := types.NewRuntime(e.sshClient, artifactMgr, registryMgr, plan, target, host, env, hostLogger.Stdout(), hostLogger.Stderr())
 
 	// Evaluate guard condition
 	if job.Guard != nil {
@@ -245,7 +253,15 @@ func (e *executor) executeJob(ctx context.Context, job *schema.Job, plan string,
 
 	// Execute each action sequentially
 	for i, actionSchema := range job.Actions {
-		action, err := e.createAction(&actionSchema)
+		// Get action type for delimiter
+		actionType := getActionType(&actionSchema)
+
+		// Write delimiter to log (with optional name)
+		if err := hostLogger.WriteJobDelimiter(jobName, actionType, actionSchema.Name, i); err != nil {
+			return fmt.Errorf("failed to write log delimiter: %w", err)
+		}
+
+		action, err := e.createAction(&actionSchema, hostLogger)
 		if err != nil {
 			return fmt.Errorf("action %d: %w", i, err)
 		}
@@ -258,9 +274,9 @@ func (e *executor) executeJob(ctx context.Context, job *schema.Job, plan string,
 	return nil
 }
 
-func (e *executor) createAction(actionSchema *schema.Action) (actions.Action, error) {
+func (e *executor) createAction(actionSchema *schema.Action, planLogger *logger.Logger) (actions.Action, error) {
 	if actionSchema.Run != nil {
-		return actions.NewRunAction(actionSchema.Run, e.stdout, e.stderr), nil
+		return actions.NewRunAction(actionSchema.Run), nil
 	}
 	if actionSchema.Copy != nil {
 		return actions.NewCopyAction(actionSchema.Copy), nil
@@ -285,6 +301,35 @@ func (e *executor) createAction(actionSchema *schema.Action) (actions.Action, er
 	}
 
 	return nil, fmt.Errorf("no action type specified")
+}
+
+// getActionType extracts the action type from the action schema
+func getActionType(actionSchema *schema.Action) string {
+	if actionSchema.Run != nil {
+		return "run"
+	}
+	if actionSchema.Copy != nil {
+		return "copy"
+	}
+	if actionSchema.Template != nil {
+		return "template"
+	}
+	if actionSchema.Mkdir != nil {
+		return "mkdir"
+	}
+	if actionSchema.Push != nil {
+		return "push"
+	}
+	if actionSchema.Pull != nil {
+		return "pull"
+	}
+	if actionSchema.Wait != nil {
+		return "wait"
+	}
+	if actionSchema.Gpg != nil {
+		return "gpg"
+	}
+	return "unknown"
 }
 
 func (e *executor) loadArtifacts(job *schema.Job, artifactMgr artifacts.Manager) error {
@@ -365,11 +410,11 @@ func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.P
 
 		// Show actions for each host
 		for _, host := range hosts {
-			runtime := types.NewRuntime(e.sshClient, artifactMgr, registryMgr, planName, step.Targets[0], host, mergedEnv)
+			runtime := types.NewRuntime(e.sshClient, artifactMgr, registryMgr, planName, step.Targets[0], host, mergedEnv, e.stdout, e.stderr)
 
 			fmt.Fprintf(e.stdout, "\n  [%s]\n", host.Name)
 			for _, actionSchema := range job.Actions {
-				action, err := e.createAction(&actionSchema)
+				action, err := e.createAction(&actionSchema, nil)
 				if err != nil {
 					return err
 				}

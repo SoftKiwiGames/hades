@@ -17,6 +17,7 @@ type Artifact struct {
 }
 
 type Action struct {
+	Name     string          `yaml:"name,omitempty"`
 	Run      *ActionRun      `yaml:"run,omitempty"`
 	Copy     *ActionCopy     `yaml:"copy,omitempty"`
 	Template *ActionTemplate `yaml:"template,omitempty"`

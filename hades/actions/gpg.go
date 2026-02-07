@@ -98,8 +98,8 @@ func (a *GpgAction) Execute(ctx context.Context, runtime *types.Runtime) error {
 		dearmorCmd := fmt.Sprintf("gpg --yes --dearmor -o %s < %s && chmod %o %s && rm -f %s",
 			path, tmpPath, a.Mode, path, tmpPath)
 
-		var stderr io.Writer
-		if err := sess.Run(ctx, dearmorCmd, nil, stderr); err != nil {
+		// Use runtime's writers to log the dearmor command output
+		if err := sess.Run(ctx, dearmorCmd, runtime.Stdout, runtime.Stderr); err != nil {
 			return fmt.Errorf("failed to dearmor GPG keyring: %w", err)
 		}
 	} else {
