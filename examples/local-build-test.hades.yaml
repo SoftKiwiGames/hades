@@ -1,0 +1,114 @@
+# Test local execution feature
+
+registries:
+  local:
+    type: filesystem
+    path: ./test-registry
+
+jobs:
+  # This job runs on your LOCAL machine (no SSH needed)
+  build:
+    local: true                    # ← Runs locally!
+    env:
+      TAG:
+    artifacts:
+      bin:
+        path: build/testapp
+    actions:
+      - name: Show current directory
+        run: pwd
+
+      - name: Show user
+        run: whoami
+
+      - name: Create build directory
+        run: mkdir -p build
+
+      - name: Create test binary
+        run: |
+          echo '#!/bin/bash' > build/testapp
+          echo 'echo "Test app ${TAG}"' >> build/testapp
+          chmod +x build/testapp
+
+      - name: Verify binary
+        run: ls -lh build/testapp
+
+  # This job also runs locally to publish
+  publish:
+    local: true                    # ← Also runs locally!
+    env:
+      TAG:
+    artifacts:
+      bin:
+        path: build/testapp
+    actions:
+      - name: Push to registry
+        push:
+          registry: local
+          artifact: bin
+          name: testapp
+          tag: ${TAG}
+
+  # This job runs on REMOTE servers
+  deploy:
+    # local: false (default) - runs on remote hosts via SSH
+    env:
+      TAG:
+    actions:
+      - name: Pull from registry
+        pull:
+          registry: local
+          name: testapp
+          tag: ${TAG}
+          to: /tmp/testapp
+
+      - name: Make executable
+        run: chmod +x /tmp/testapp
+
+      - name: Test binary
+        run: /tmp/testapp
+
+plans:
+  # Build locally without SSH
+  test-local:
+    steps:
+      - name: build
+        job: build
+        targets: [localhost]      # Still needs a target, but doesn't SSH
+        limit: 1
+        env:
+          TAG: v1.0.0
+
+  # Full pipeline
+  full:
+    steps:
+      - name: build-local
+        job: build
+        targets: [localhost]
+        limit: 1
+        env:
+          TAG: v1.0.0
+
+      - name: publish-local
+        job: publish
+        targets: [localhost]
+        limit: 1
+        env:
+          TAG: v1.0.0
+
+      - name: deploy-remote
+        job: deploy
+        targets: [servers]
+        env:
+          TAG: v1.0.0
+
+# Minimal inventory
+hosts:
+  localhost:
+    addr: 127.0.0.1
+    user: ignored  # Not used with local: true
+    identity_file: ~/.ssh/id_rsa
+
+targets:
+  localhost:
+    - localhost

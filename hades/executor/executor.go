@@ -251,8 +251,16 @@ func (e *executor) executeJob(ctx context.Context, job *schema.Job, jobName stri
 	}
 	defer hostLogger.Close()
 
+	// Determine which client to use: local or SSH
+	var client ssh.Client
+	if job.Local {
+		client = ssh.NewLocalClient()
+	} else {
+		client = e.sshClient
+	}
+
 	// Create runtime context with logger writers and console writers
-	runtime := types.NewRuntime(e.sshClient, artifactMgr, registryMgr, runID, plan, target, host, env, hostLogger.Stdout(), hostLogger.Stderr(), e.stdout, e.stderr)
+	runtime := types.NewRuntime(client, artifactMgr, registryMgr, runID, plan, target, host, env, hostLogger.Stdout(), hostLogger.Stderr(), e.stdout, e.stderr)
 
 	// Evaluate guard condition first (before showing job starting)
 	if job.Guard != nil {
@@ -463,7 +471,15 @@ func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.P
 
 		// Show actions for each host
 		for _, host := range hosts {
-			runtime := types.NewRuntime(e.sshClient, artifactMgr, registryMgr, "dry-run", planName, stepTargets[0], host, mergedEnv, e.stdout, e.stderr, e.stdout, e.stderr)
+			// Determine which client to use: local or SSH
+			var client ssh.Client
+			if job.Local {
+				client = ssh.NewLocalClient()
+			} else {
+				client = e.sshClient
+			}
+
+			runtime := types.NewRuntime(client, artifactMgr, registryMgr, "dry-run", planName, stepTargets[0], host, mergedEnv, e.stdout, e.stderr, e.stdout, e.stderr)
 
 			fmt.Fprintf(e.stdout, "\n  [%s]\n", host.Name)
 			for _, actionSchema := range job.Actions {
