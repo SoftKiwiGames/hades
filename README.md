@@ -82,6 +82,7 @@ Hades **is**:
 - **Streaming output** - real-time logs
 - **Atomic copies** - tmp + mv pattern
 - **Per-host isolation** - parallel safe
+- **Custom ports** - support for non-standard SSH ports
 
 ## Architecture
 

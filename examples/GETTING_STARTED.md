@@ -53,10 +53,11 @@ Create `inventory.yaml`:
 
 ```yaml
 hosts:
-  - name: server-1
+  server-1:
     addr: 192.168.1.10
     user: deploy
-    key: /home/user/.ssh/id_rsa
+    identity_file: /home/user/.ssh/id_rsa
+    # port: 22  (optional, defaults to 22)
 
 targets:
   my-servers:
@@ -66,7 +67,8 @@ targets:
 Update with your actual:
 - `addr`: Server IP or hostname
 - `user`: SSH user
-- `key`: Path to SSH private key
+- `identity_file`: Path to SSH private key
+- `port`: SSH port (optional, defaults to 22)
 
 ## Step 4: Test with Dry-Run
 
@@ -211,20 +213,20 @@ Deploy to multiple servers with controlled rollout:
 ```yaml
 # inventory.yaml - add more servers
 hosts:
-  - name: server-1
+  server-1:
     addr: 192.168.1.10
     user: deploy
-    key: ~/.ssh/id_rsa
+    identity_file: ~/.ssh/id_rsa
 
-  - name: server-2
+  server-2:
     addr: 192.168.1.11
     user: deploy
-    key: ~/.ssh/id_rsa
+    identity_file: ~/.ssh/id_rsa
 
-  - name: server-3
+  server-3:
     addr: 192.168.1.12
     user: deploy
-    key: ~/.ssh/id_rsa
+    identity_file: ~/.ssh/id_rsa
 
 targets:
   my-servers:

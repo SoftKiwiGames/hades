@@ -18,6 +18,7 @@ type Host struct {
 	Address string
 	User    string
 	KeyPath string
+	Port    int
 }
 
 type client struct {
@@ -58,20 +59,11 @@ func (c *client) Connect(ctx context.Context, host Host) (Session, error) {
 	}
 
 	// Connect to the host
-	addr := host.Address
-	if addr[len(addr)-3:] != ":22" && addr[len(addr)-4:] != ":22" {
-		// Check if address already has port
-		hasPort := false
-		for i := len(addr) - 1; i >= 0 && i > len(addr)-6; i-- {
-			if addr[i] == ':' {
-				hasPort = true
-				break
-			}
-		}
-		if !hasPort {
-			addr = addr + ":22"
-		}
+	port := host.Port
+	if port == 0 {
+		port = 22
 	}
+	addr := fmt.Sprintf("%s:%d", host.Address, port)
 
 	conn, err := ssh.Dial("tcp", addr, config)
 	if err != nil {

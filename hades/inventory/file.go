@@ -24,6 +24,7 @@ type hostDef struct {
 	Addr         string `yaml:"addr"`
 	User         string `yaml:"user"`
 	IdentityFile string `yaml:"identity_file"`
+	Port         int    `yaml:"port"`
 }
 
 func LoadFile(path string) (Inventory, error) {
@@ -49,6 +50,7 @@ func LoadFile(path string) (Inventory, error) {
 			Address: h.Addr,
 			User:    h.User,
 			KeyPath: keyPath,
+			Port:    h.Port,
 		})
 	}
 
@@ -104,6 +106,7 @@ func LoadDirectory(rootPath string) (Inventory, error) {
 				Address: h.Addr,
 				User:    h.User,
 				KeyPath: keyPath,
+				Port:    h.Port,
 			}
 		}
 

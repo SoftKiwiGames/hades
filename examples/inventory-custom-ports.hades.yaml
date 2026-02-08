@@ -1,0 +1,41 @@
+# Example inventory demonstrating custom SSH ports
+
+hosts:
+  web-01:
+    addr: 192.168.1.10
+    user: deploy
+    identity_file: ~/.ssh/id_rsa
+    # Uses default port 22 (port field omitted)
+
+  web-02:
+    addr: 192.168.1.11
+    user: deploy
+    identity_file: ~/.ssh/id_rsa
+    port: 2222  # Custom SSH port
+
+  bastion:
+    addr: bastion.example.com
+    user: ubuntu
+    identity_file: ~/.ssh/bastion_key.pem
+    port: 22022  # Non-standard port
+
+  dev-server:
+    addr: dev.internal.net
+    user: admin
+    identity_file: ~/.ssh/dev_key.pem
+    port: 2200
+
+targets:
+  web-servers:
+    - web-01
+    - web-02
+
+  infrastructure:
+    - bastion
+    - dev-server
+
+  all:
+    - web-01
+    - web-02
+    - bastion
+    - dev-server
