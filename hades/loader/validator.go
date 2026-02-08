@@ -108,15 +108,20 @@ func ValidatePlanEnv(file *schema.File, planName string, cliEnv map[string]strin
 			return fmt.Errorf("step %q: job %q not found", step.Name, step.Job)
 		}
 
-		// Merge envs: CLI > step > defaults
+		// Merge envs: CLI > step > plan > defaults
 		mergedEnv := make(map[string]string)
 
-		// Start with step env
+		// Start with plan-level env
+		for k, v := range plan.Env {
+			mergedEnv[k] = v
+		}
+
+		// Step env overrides plan
 		for k, v := range step.Env {
 			mergedEnv[k] = v
 		}
 
-		// Override with CLI env
+		// CLI overrides everything
 		for k, v := range cliEnv {
 			mergedEnv[k] = v
 		}

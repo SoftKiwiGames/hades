@@ -125,14 +125,34 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 
 	// Compare checksums and decide
 	if exists && localChecksum == remoteChecksum {
-		// SKIP: Checksums match - file is identical
-		// Log: plain text
-		fmt.Fprintf(runtime.Stdout, "Skipping %s (%s, already up to date)\n", dst, sizeStr)
-		// Console: with action format and skip symbol (blue)
-		if runtime.ConsoleStdout != nil {
-			fmt.Fprintf(runtime.ConsoleStdout, "[%s] %s○%s Action %s: skipped (%s, %s already up to date)\n",
-				runtime.Host.Name, ctc.ForegroundBlue, ctc.Reset, runtime.ActionDesc, dst, sizeStr)
+		// Content matches - check permissions
+		remoteMode, err := getRemotePermissions(ctx, sess, dst)
+		if err != nil {
+			// Can't get permissions - just skip
+			fmt.Fprintf(runtime.Stdout, "Skipping %s (%s, already up to date)\n", dst, sizeStr)
+			if runtime.ConsoleStdout != nil {
+				fmt.Fprintf(runtime.ConsoleStdout, "[%s] %s○%s Action %s: skipped (%s, %s already up to date)\n",
+					runtime.Host.Name, ctc.ForegroundBlue, ctc.Reset, runtime.ActionDesc, dst, sizeStr)
+			}
+			return nil
 		}
+
+		if remoteMode == a.Mode {
+			// Content AND permissions match - skip entirely
+			fmt.Fprintf(runtime.Stdout, "Skipping %s (%s, already up to date)\n", dst, sizeStr)
+			if runtime.ConsoleStdout != nil {
+				fmt.Fprintf(runtime.ConsoleStdout, "[%s] %s○%s Action %s: skipped (%s, %s already up to date)\n",
+					runtime.Host.Name, ctc.ForegroundBlue, ctc.Reset, runtime.ActionDesc, dst, sizeStr)
+			}
+			return nil
+		}
+
+		// Content matches but permissions differ - just chmod
+		chmodCmd := fmt.Sprintf("chmod %o %s", a.Mode, dst)
+		if err := sess.Run(ctx, chmodCmd, runtime.Stdout, runtime.Stderr); err != nil {
+			return fmt.Errorf("failed to update permissions: %w", err)
+		}
+		fmt.Fprintf(runtime.Stdout, "Updated permissions on %s (%o -> %o)\n", dst, remoteMode, a.Mode)
 		return nil
 	}
 
@@ -220,4 +240,33 @@ func getRemoteChecksum(ctx context.Context, sess ssh.Session, remotePath string)
 	}
 
 	return parts[0], true, nil
+}
+
+// getRemotePermissions returns the file's permissions as uint32 (octal mode)
+// Returns error if file doesn't exist or permissions can't be read
+func getRemotePermissions(ctx context.Context, sess ssh.Session, remotePath string) (uint32, error) {
+	var stdout bytes.Buffer
+
+	// Use stat command to get permissions in octal format
+	// %a gives permissions in octal (e.g., 644)
+	cmd := fmt.Sprintf("stat -c '%%a' %s 2>/dev/null", remotePath)
+
+	err := sess.Run(ctx, cmd, &stdout, io.Discard)
+	if err != nil {
+		return 0, fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	output := strings.TrimSpace(stdout.String())
+	if output == "" {
+		return 0, fmt.Errorf("no output from stat command")
+	}
+
+	// Parse octal string to uint32
+	var mode uint32
+	_, err = fmt.Sscanf(output, "%o", &mode)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse permissions %q: %w", output, err)
+	}
+
+	return mode, nil
 }

@@ -1,0 +1,81 @@
+# Example demonstrating plan-level environment variables
+# Plan-level env cascades to all steps, step-level overrides
+
+jobs:
+  show-env:
+    env:
+      VERSION:
+      ENV:
+        default: dev
+      REGION:
+        default: us-east-1
+    actions:
+      - name: Show environment
+        run: |
+          echo "VERSION: ${VERSION}"
+          echo "ENV: ${ENV}"
+          echo "REGION: ${REGION}"
+
+plans:
+  # Plan-level env applies to ALL steps
+  deploy-all-regions:
+    env:                        # ← Plan-level env
+      VERSION: v1.0.0           # All steps get this
+      ENV: production           # All steps get this
+    steps:
+      - name: deploy-us-east
+        job: show-env
+        targets: [servers]
+        # Inherits: VERSION=v1.0.0, ENV=production, REGION=us-east-1 (default)
+
+      - name: deploy-us-west
+        job: show-env
+        targets: [servers]
+        env:
+          REGION: us-west-2     # ← Step overrides REGION only
+        # Has: VERSION=v1.0.0 (from plan), ENV=production (from plan), REGION=us-west-2 (overridden)
+
+      - name: deploy-eu
+        job: show-env
+        targets: [servers]
+        env:
+          REGION: eu-west-1     # ← Step overrides REGION only
+        # Has: VERSION=v1.0.0 (from plan), ENV=production (from plan), REGION=eu-west-1 (overridden)
+
+  # Without plan-level env (old way - still works)
+  deploy-old-way:
+    steps:
+      - name: deploy-us-east
+        job: show-env
+        targets: [servers]
+        env:
+          VERSION: v1.0.0
+          ENV: production
+          REGION: us-east-1
+
+      - name: deploy-us-west
+        job: show-env
+        targets: [servers]
+        env:
+          VERSION: v1.0.0      # Repetitive!
+          ENV: production       # Repetitive!
+          REGION: us-west-2
+
+  # Mix of plan-level and step-level
+  canary-deploy:
+    env:
+      VERSION: v2.0.0           # All steps use this version
+      ENV: production
+    steps:
+      - name: canary
+        job: show-env
+        targets: [servers]
+        limit: 1
+        # Uses VERSION=v2.0.0, ENV=production from plan
+
+      - name: rollout
+        job: show-env
+        targets: [servers]
+        env:
+          VERSION: v2.0.1       # ← Override version for rollout step only
+        # Uses VERSION=v2.0.1 (overridden), ENV=production (from plan)

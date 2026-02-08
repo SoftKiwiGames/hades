@@ -50,7 +50,8 @@ Environment variables merge with the following priority (highest to lowest):
 
 1. **CLI flags** (`-e KEY=VALUE`)
 2. **Step-level env** (in plan)
-3. **Job defaults**
+3. **Plan-level env** (in plan)
+4. **Job defaults**
 
 ### Example
 
@@ -59,22 +60,54 @@ jobs:
   deploy:
     env:
       MODE:
-        default: production  # Priority 3: Default
+        default: production  # Priority 4: Default
+      VERSION:
 
 plans:
   staging:
+    env:
+      VERSION: v1.0.0        # Priority 3: Plan-level
     steps:
-      - name: deploy
+      - name: deploy-1
         job: deploy
         env:
-          MODE: staging      # Priority 2: Step overrides default
+          MODE: staging      # Priority 2: Step overrides plan and default
+
+      - name: deploy-2
+        job: deploy
+        # Inherits: VERSION=v1.0.0 (from plan), MODE=production (from default)
 ```
 
 ```bash
 # Priority 1: CLI overrides everything
-hades run staging -e MODE=development
-# Result: MODE=development
+hades run staging -e MODE=development -e VERSION=v2.0.0
+# Result: MODE=development, VERSION=v2.0.0
 ```
+
+### Plan-Level Variables (NEW)
+
+You can now define environment variables at the plan level to avoid repetition:
+
+```yaml
+plans:
+  multi-region:
+    env:                     # ← Plan-level env (applies to ALL steps)
+      VERSION: v1.0.0
+      ENV: production
+    steps:
+      - name: deploy-us
+        job: deploy
+        env:
+          REGION: us-east-1  # Step adds REGION, inherits VERSION and ENV
+
+      - name: deploy-eu
+        job: deploy
+        env:
+          REGION: eu-west-1  # Step adds REGION, inherits VERSION and ENV
+          VERSION: v1.0.1    # Step can override plan-level VERSION
+```
+
+This is much cleaner than repeating `VERSION` and `ENV` in every step!
 
 ## Built-in Variables (HADES_*)
 

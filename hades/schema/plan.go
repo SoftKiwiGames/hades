@@ -1,7 +1,8 @@
 package schema
 
 type Plan struct {
-	Steps []Step `yaml:"steps"`
+	Env   map[string]string `yaml:"env,omitempty"`
+	Steps []Step            `yaml:"steps"`
 }
 
 type Step struct {

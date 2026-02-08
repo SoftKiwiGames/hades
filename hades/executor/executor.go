@@ -130,13 +130,22 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 			return result, result.Error
 		}
 
-		// Merge env with priority: CLI > step > job defaults
+		// Merge env with priority: CLI > step > plan > job defaults
 		stepEnv := make(map[string]string)
+
+		// Start with plan-level env
+		for k, v := range plan.Env {
+			stepEnv[k] = v
+		}
+
+		// Step env overrides plan
 		for k, v := range step.Env {
 			stepEnv[k] = v
 		}
+
+		// CLI overrides everything
 		for k, v := range env {
-			stepEnv[k] = v // CLI overrides step
+			stepEnv[k] = v
 		}
 
 		// Merge with job defaults
@@ -457,13 +466,22 @@ func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.P
 			return err
 		}
 
-		// Merge env with priority: CLI > step > job defaults
+		// Merge env with priority: CLI > step > plan > job defaults
 		stepEnv := make(map[string]string)
+
+		// Start with plan-level env
+		for k, v := range plan.Env {
+			stepEnv[k] = v
+		}
+
+		// Step env overrides plan
 		for k, v := range step.Env {
 			stepEnv[k] = v
 		}
+
+		// CLI overrides everything
 		for k, v := range env {
-			stepEnv[k] = v // CLI overrides step
+			stepEnv[k] = v
 		}
 
 		// Merge with job defaults
