@@ -26,10 +26,8 @@ func (a *RunAction) Execute(ctx context.Context, runtime *types.Runtime) error {
 	}
 	defer sess.Close()
 
-	// Build command with environment variables
-	// For now, just run the command directly
-	// TODO: In Phase 6, properly inject environment variables
-	cmd := a.Command
+	// Expand environment variables in the command
+	cmd := ExpandEnvVars(a.Command, runtime.Env)
 
 	// Execute command - use runtime's stdout/stderr to ensure output goes to logs
 	if err := sess.Run(ctx, cmd, runtime.Stdout, runtime.Stderr); err != nil {
@@ -40,5 +38,7 @@ func (a *RunAction) Execute(ctx context.Context, runtime *types.Runtime) error {
 }
 
 func (a *RunAction) DryRun(ctx context.Context, runtime *types.Runtime) string {
-	return fmt.Sprintf("run: %s", a.Command)
+	// Expand environment variables for dry-run display
+	cmd := ExpandEnvVars(a.Command, runtime.Env)
+	return fmt.Sprintf("run: %s", cmd)
 }

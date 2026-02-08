@@ -28,8 +28,11 @@ func (a *MkdirAction) Execute(ctx context.Context, runtime *types.Runtime) error
 	}
 	defer sess.Close()
 
+	// Expand environment variables in path
+	path := ExpandEnvVars(a.Path, runtime.Env)
+
 	// Build mkdir command with mode
-	cmd := fmt.Sprintf("mkdir -p %s && chmod %o %s", a.Path, a.Mode, a.Path)
+	cmd := fmt.Sprintf("mkdir -p %s && chmod %o %s", path, a.Mode, path)
 
 	// Execute command - use runtime's writers to log output
 	if err := sess.Run(ctx, cmd, runtime.Stdout, runtime.Stderr); err != nil {
@@ -40,5 +43,6 @@ func (a *MkdirAction) Execute(ctx context.Context, runtime *types.Runtime) error
 }
 
 func (a *MkdirAction) DryRun(ctx context.Context, runtime *types.Runtime) string {
-	return fmt.Sprintf("mkdir: %s (mode: %o)", a.Path, a.Mode)
+	path := ExpandEnvVars(a.Path, runtime.Env)
+	return fmt.Sprintf("mkdir: %s (mode: %o)", path, a.Mode)
 }

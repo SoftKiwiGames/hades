@@ -99,8 +99,11 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 	}
 	defer sess.Close()
 
+	// Expand environment variables in destination path
+	dst := ExpandEnvVars(a.Dst, runtime.Env)
+
 	// Get remote checksum (with fallback on error)
-	remoteChecksum, exists, err := getRemoteChecksum(ctx, sess, a.Dst)
+	remoteChecksum, exists, err := getRemoteChecksum(ctx, sess, dst)
 	if err != nil {
 		// Severe error - fail
 		return fmt.Errorf("failed to check remote file: %w", err)
@@ -110,28 +113,29 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 	if exists && localChecksum == remoteChecksum {
 		// SKIP: Checksums match - file is identical
 		// Log: plain text
-		fmt.Fprintf(runtime.Stdout, "Skipping %s (already up to date)\n", a.Dst)
+		fmt.Fprintf(runtime.Stdout, "Skipping %s (already up to date)\n", dst)
 		// Console: with action format and skip symbol (blue)
 		if runtime.ConsoleStdout != nil {
 			fmt.Fprintf(runtime.ConsoleStdout, "[%s] %s○%s Action %s: skipped (%s already up to date)\n",
-				runtime.Host.Name, ctc.ForegroundBlue, ctc.Reset, runtime.ActionDesc, a.Dst)
+				runtime.Host.Name, ctc.ForegroundBlue, ctc.Reset, runtime.ActionDesc, dst)
 		}
 		return nil
 	}
 
 	// Copy file (checksums differ, file doesn't exist, or tool missing)
-	if err := sess.CopyFile(ctx, reader, a.Dst, a.Mode); err != nil {
-		return fmt.Errorf("failed to copy %s to %s: %w", srcDesc, a.Dst, err)
+	if err := sess.CopyFile(ctx, reader, dst, a.Mode); err != nil {
+		return fmt.Errorf("failed to copy %s to %s: %w", srcDesc, dst, err)
 	}
 
 	return nil
 }
 
 func (a *CopyAction) DryRun(ctx context.Context, runtime *types.Runtime) string {
+	dst := ExpandEnvVars(a.Dst, runtime.Env)
 	if a.Artifact != "" {
-		return fmt.Sprintf("copy: artifact=%s to=%s (mode: %o, verify checksum)", a.Artifact, a.Dst, a.Mode)
+		return fmt.Sprintf("copy: artifact=%s to=%s (mode: %o, verify checksum)", a.Artifact, dst, a.Mode)
 	}
-	return fmt.Sprintf("copy: %s to %s (mode: %o, verify checksum)", a.Src, a.Dst, a.Mode)
+	return fmt.Sprintf("copy: %s to %s (mode: %o, verify checksum)", a.Src, dst, a.Mode)
 }
 
 // calculateChecksum reads content and returns SHA-256 hash
