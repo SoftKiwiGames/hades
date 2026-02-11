@@ -24,16 +24,10 @@ func ValidateEnvContract(job *schema.Job, provided map[string]string) error {
 		}
 	}
 
-	// Check that no unknown env vars are provided
+	// Check that no HADES_* env vars are provided by user
 	for name := range provided {
-		// HADES_* vars will be added by runtime, so they're expected
 		if strings.HasPrefix(name, "HADES_") {
 			return fmt.Errorf("user cannot provide HADES_* environment variables: %s", name)
-		}
-
-		// Check if this env var is defined in the job
-		if _, ok := job.Env[name]; !ok {
-			return fmt.Errorf("unknown environment variable %q (not defined in job env contract)", name)
 		}
 	}
 

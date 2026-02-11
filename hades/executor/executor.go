@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -151,13 +150,8 @@ func (e *executor) ExecutePlan(ctx context.Context, file *schema.File, plan *sch
 		// Merge with job defaults
 		mergedEnv := loader.MergeEnv(job, stepEnv)
 
-		// Load artifacts for this job if any are defined
-		if err := e.loadArtifacts(job, artifactMgr); err != nil {
-			result.Failed = true
-			result.FailedStep = step.Name
-			result.Error = fmt.Errorf("failed to load artifacts: %w", err)
-			return result, result.Error
-		}
+		// Register artifacts for this job (loaded lazily when accessed)
+		e.loadArtifacts(job, artifactMgr)
 
 		// Execute all unique hosts
 		// Parse rollout strategy
@@ -386,23 +380,11 @@ func getActionType(actionSchema *schema.Action) string {
 	return "unknown"
 }
 
-func (e *executor) loadArtifacts(job *schema.Job, artifactMgr artifacts.Manager) error {
-	// Load artifacts defined in the job
+func (e *executor) loadArtifacts(job *schema.Job, artifactMgr artifacts.Manager) {
+	// Register artifacts defined in the job (loaded lazily on first access)
 	for name, artifact := range job.Artifacts {
-		file, err := os.Open(artifact.Path)
-		if err != nil {
-			return fmt.Errorf("failed to open artifact %s at %s: %w", name, artifact.Path, err)
-		}
-		defer file.Close()
-
-		if err := artifactMgr.Store(name, file); err != nil {
-			return fmt.Errorf("failed to store artifact %s: %w", name, err)
-		}
-
-		fmt.Fprintf(e.stdout, "  Loaded artifact: %s from %s\n", name, artifact.Path)
+		artifactMgr.Register(name, artifact.Path)
 	}
-
-	return nil
 }
 
 func (e *executor) loadJob(file *schema.File, name string) (*schema.Job, error) {

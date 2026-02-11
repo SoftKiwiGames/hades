@@ -42,7 +42,7 @@ func TestValidateEnvContract(t *testing.T) {
 			errMsg:  "required environment variable \"MODE\" not provided",
 		},
 		{
-			name: "unknown var provided",
+			name: "unknown var provided is ignored",
 			job: schema.Job{
 				Env: map[string]schema.Env{
 					"VERSION": {},
@@ -52,8 +52,7 @@ func TestValidateEnvContract(t *testing.T) {
 				"VERSION": "v1.0.0",
 				"UNKNOWN": "value",
 			},
-			wantErr: true,
-			errMsg:  "unknown environment variable \"UNKNOWN\"",
+			wantErr: false,
 		},
 		{
 			name: "user provides HADES_ var",

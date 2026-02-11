@@ -89,11 +89,10 @@ deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.
 deb-src [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main
 `
 
-var caddyfileTemplate = `
-# This file was generated during hades run: ${HADES_RUN_ID}
+var caddyfileTemplate = `# This file was generated during hades run: {{.Env.HADES_RUN_ID}}
 # Do not edit manually.
 
-${DOMAIN} {
+{{.Env.DOMAIN}} {
 	reverse_proxy localhost:8080
 }
 `
