@@ -12,8 +12,9 @@ import (
 )
 
 type fileInventory struct {
-	hosts   []ssh.Host
-	targets map[string][]string
+	hosts        []ssh.Host
+	targets      map[string][]string
+	dynamicHosts []ssh.Host
 }
 
 type inventoryFile struct {
@@ -60,10 +61,13 @@ func LoadFile(path string) (Inventory, error) {
 		targets = make(map[string][]string)
 	}
 
+	var dynamicHosts []ssh.Host
 	if len(file.HostsProviders) > 0 {
-		if err := resolveProviders(context.Background(), file.HostsProviders, hostMap, targets); err != nil {
+		dyn, err := resolveProviders(context.Background(), file.HostsProviders, hostMap, targets)
+		if err != nil {
 			return nil, fmt.Errorf("failed to resolve providers: %w", err)
 		}
+		dynamicHosts = dyn
 	}
 
 	hosts := make([]ssh.Host, 0, len(hostMap))
@@ -72,8 +76,9 @@ func LoadFile(path string) (Inventory, error) {
 	}
 
 	return &fileInventory{
-		hosts:   hosts,
-		targets: targets,
+		hosts:        hosts,
+		targets:      targets,
+		dynamicHosts: dynamicHosts,
 	}, nil
 }
 
@@ -146,10 +151,13 @@ func LoadDirectory(rootPath string) (Inventory, error) {
 		return nil, err
 	}
 
+	var dynamicHosts []ssh.Host
 	if len(allProviders) > 0 {
-		if err := resolveProviders(context.Background(), allProviders, allHosts, allTargets); err != nil {
+		dyn, err := resolveProviders(context.Background(), allProviders, allHosts, allTargets)
+		if err != nil {
 			return nil, fmt.Errorf("failed to resolve providers: %w", err)
 		}
+		dynamicHosts = dyn
 	}
 
 	// Convert map to slice for hosts
@@ -159,8 +167,9 @@ func LoadDirectory(rootPath string) (Inventory, error) {
 	}
 
 	return &fileInventory{
-		hosts:   hosts,
-		targets: allTargets,
+		hosts:        hosts,
+		targets:      allTargets,
+		dynamicHosts: dynamicHosts,
 	}, nil
 }
 
@@ -198,4 +207,8 @@ func (f *fileInventory) ResolveTarget(name string) ([]ssh.Host, error) {
 
 func (f *fileInventory) AllHosts() []ssh.Host {
 	return f.hosts
+}
+
+func (f *fileInventory) DynamicHosts() []ssh.Host {
+	return f.dynamicHosts
 }

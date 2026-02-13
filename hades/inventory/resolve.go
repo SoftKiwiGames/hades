@@ -10,11 +10,13 @@ import (
 	"github.com/SoftKiwiGames/hades/hades/utils"
 )
 
-func resolveProviders(ctx context.Context, providers []Provider, hosts map[string]ssh.Host, targets map[string][]string) error {
+func resolveProviders(ctx context.Context, providers []Provider, hosts map[string]ssh.Host, targets map[string][]string) ([]ssh.Host, error) {
+	var dynamic []ssh.Host
+
 	for _, p := range providers {
 		instances, err := fetchInstances(ctx, p)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		for _, inst := range instances {
@@ -25,7 +27,7 @@ func resolveProviders(ctx context.Context, providers []Provider, hosts map[strin
 			if p.Selector != "" {
 				match, errs := selector.Eval(p.Selector, inst.Tags)
 				if errs != nil {
-					return fmt.Errorf("provider %q: selector error: %w", p.Provider, errs)
+					return nil, fmt.Errorf("provider %q: selector error: %w", p.Provider, errs)
 				}
 				if !match {
 					continue
@@ -38,16 +40,17 @@ func resolveProviders(ctx context.Context, providers []Provider, hosts map[strin
 
 			host, err := instanceToHost(inst, p)
 			if err != nil {
-				return fmt.Errorf("provider %q: host %q: %w", p.Provider, inst.Name, err)
+				return nil, fmt.Errorf("provider %q: host %q: %w", p.Provider, inst.Name, err)
 			}
 			hosts[inst.Name] = host
+			dynamic = append(dynamic, host)
 
 			for _, t := range p.Targets {
 				targets[t] = append(targets[t], inst.Name)
 			}
 		}
 	}
-	return nil
+	return dynamic, nil
 }
 
 func fetchInstances(ctx context.Context, p Provider) ([]cloud.CloudInstance, error) {

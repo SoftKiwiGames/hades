@@ -1,6 +1,7 @@
 package hades
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -116,6 +117,13 @@ func (h *Hades) runPlan(planName, configDir string, targets, envVars []string, d
 		return fmt.Errorf("failed to load inventory: %w", err)
 	}
 
+	// Confirm dynamic hosts before proceeding
+	if dynamicHosts := inv.DynamicHosts(); len(dynamicHosts) > 0 {
+		if err := h.confirmDynamicHosts(dynamicHosts); err != nil {
+			return err
+		}
+	}
+
 	// Create SSH client
 	sshClient := ssh.NewClient()
 	defer sshClient.Close()
@@ -138,6 +146,34 @@ func (h *Hades) runPlan(planName, configDir string, targets, envVars []string, d
 		return fmt.Errorf("plan failed")
 	}
 
+	return nil
+}
+
+func (h *Hades) confirmDynamicHosts(hosts []ssh.Host) error {
+	fmt.Fprintf(h.stdout, "\n%sDynamic inventory detected %d host(s):%s\n\n", ctc.ForegroundYellow, len(hosts), ctc.Reset)
+
+	nameW := len("NAME")
+	for _, host := range hosts {
+		if len(host.Name) > nameW {
+			nameW = len(host.Name)
+		}
+	}
+
+	fmt.Fprintf(h.stdout, "\033[1m  %-*s  %s\033[0m\n", nameW, "NAME", "ADDRESS")
+	for _, host := range hosts {
+		fmt.Fprintf(h.stdout, "  %-*s  %s\n", nameW, host.Name, host.Address)
+	}
+
+	fmt.Fprintf(h.stdout, "\nProceed? (yes/no): ")
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return fmt.Errorf("aborted")
+	}
+	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	if answer != "yes" && answer != "y" {
+		return fmt.Errorf("aborted by user")
+	}
+	fmt.Fprintln(h.stdout)
 	return nil
 }
 
