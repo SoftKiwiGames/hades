@@ -39,7 +39,7 @@ avoid hidden state and magic
 
 Hades must not:
 
-manage cloud resources (VMs, networks, disks)
+manage cloud resources (VMs, networks, disks) — it may read them for inventory
 
 reconcile desired state
 
@@ -61,6 +61,69 @@ Target = named group of hosts
 Inventory is external (file, CLI input, future API)
 
 Hosts are assumed to exist.
+
+3.1.1 Dynamic Inventory (hosts.providers)
+
+Static hosts are defined inline. Dynamic hosts are discovered at load time from cloud providers.
+
+hosts.providers:
+  - provider: hetzner
+    config:
+      token: ${HCLOUD_TOKEN}
+    selector: cluster == "db" && env == "dev"
+    targets: [db, hetzner]
+    ssh:
+      user: root
+      port: 22
+      identity_file: ~/.ssh/id_ed25519
+
+  - provider: aws
+    config:
+      profile: dev
+      region: eu-central-1
+    selector: env == "prod"
+    targets: [app, aws]
+    ssh:
+      user: ubuntu
+      identity_file: ~/.ssh/id_ed25519
+
+Provider = a cloud API that returns instances (Hetzner, AWS)
+
+Config = provider-specific connection parameters (token, profile, region)
+
+Selector = boolean expression evaluated against instance tags to filter which instances are included
+
+Targets = target groups that matched instances are added to
+
+SSH = connection defaults applied to all matched instances
+
+Selector syntax:
+
+key == "value", key != "value" (equality)
+
+key =~ "pattern", key !~ "pattern" (regex)
+
+&& (AND), || (OR), ! (NOT), () (grouping)
+
+AND binds tighter than OR
+
+Dynamic inventory rules:
+
+resolution happens at load time, before execution
+
+static hosts take precedence (no override)
+
+instances without a name are skipped
+
+selector is optional (omit to include all instances)
+
+provider errors are hard failures
+
+Supported providers (v1):
+
+hetzner — requires config.token
+
+aws — requires config.region (profile optional, falls back to AWS_PROFILE / default)
 
 3.2 Jobs
 

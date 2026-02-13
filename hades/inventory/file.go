@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,8 +17,9 @@ type fileInventory struct {
 }
 
 type inventoryFile struct {
-	Hosts   map[string]hostDef  `yaml:"hosts"`
-	Targets map[string][]string `yaml:"targets"`
+	Hosts          map[string]hostDef  `yaml:"hosts"`
+	Targets        map[string][]string `yaml:"targets"`
+	HostsProviders []Provider          `yaml:"hosts.providers"`
 }
 
 type hostDef struct {
@@ -38,25 +40,40 @@ func LoadFile(path string) (Inventory, error) {
 		return nil, fmt.Errorf("failed to parse inventory YAML: %w", err)
 	}
 
-	// Convert host definitions to ssh.Host
-	var hosts []ssh.Host
+	hostMap := make(map[string]ssh.Host)
 	for name, h := range file.Hosts {
 		keyPath, err := utils.ExpandPath(h.IdentityFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to expand identity_file for host %q: %w", name, err)
 		}
-		hosts = append(hosts, ssh.Host{
+		hostMap[name] = ssh.Host{
 			Name:    name,
 			Address: h.Addr,
 			User:    h.User,
 			KeyPath: keyPath,
 			Port:    h.Port,
-		})
+		}
+	}
+
+	targets := file.Targets
+	if targets == nil {
+		targets = make(map[string][]string)
+	}
+
+	if len(file.HostsProviders) > 0 {
+		if err := resolveProviders(context.Background(), file.HostsProviders, hostMap, targets); err != nil {
+			return nil, fmt.Errorf("failed to resolve providers: %w", err)
+		}
+	}
+
+	hosts := make([]ssh.Host, 0, len(hostMap))
+	for _, h := range hostMap {
+		hosts = append(hosts, h)
 	}
 
 	return &fileInventory{
 		hosts:   hosts,
-		targets: file.Targets,
+		targets: targets,
 	}, nil
 }
 
@@ -65,6 +82,7 @@ func LoadFile(path string) (Inventory, error) {
 func LoadDirectory(rootPath string) (Inventory, error) {
 	allHosts := make(map[string]ssh.Host)
 	allTargets := make(map[string][]string)
+	var allProviders []Provider
 
 	err := filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -118,11 +136,20 @@ func LoadDirectory(rootPath string) (Inventory, error) {
 			allTargets[name] = hostList
 		}
 
+		// Collect providers
+		allProviders = append(allProviders, file.HostsProviders...)
+
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
+	}
+
+	if len(allProviders) > 0 {
+		if err := resolveProviders(context.Background(), allProviders, allHosts, allTargets); err != nil {
+			return nil, fmt.Errorf("failed to resolve providers: %w", err)
+		}
 	}
 
 	// Convert map to slice for hosts

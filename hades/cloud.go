@@ -19,6 +19,7 @@ func (h *Hades) buildCloudCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(h.buildCloudHetznerCommand())
+	cmd.AddCommand(h.buildCloudAWSCommand())
 
 	return cmd
 }
@@ -64,6 +65,45 @@ func (h *Hades) buildCloudHetznerHostsCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&token, "token", "", "Hetzner Cloud API token (default: HCLOUD_TOKEN)")
+
+	return cmd
+}
+
+func (h *Hades) buildCloudAWSCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "aws",
+		Short: "Amazon Web Services",
+	}
+
+	cmd.AddCommand(h.buildCloudAWSHostsCommand())
+
+	return cmd
+}
+
+func (h *Hades) buildCloudAWSHostsCommand() *cobra.Command {
+	var profile, region string
+
+	cmd := &cobra.Command{
+		Use:           "hosts",
+		Short:         "List cloud instances",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			instances, err := cloud.AWSInstances(
+				context.Background(),
+				cloud.AWSConfig{Profile: profile, Region: region},
+			)
+			if err != nil {
+				return err
+			}
+
+			h.printInstances(instances)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&profile, "profile", "", "AWS profile (default: AWS_PROFILE)")
+	cmd.Flags().StringVar(&region, "region", "", "AWS region (default: AWS_REGION)")
 
 	return cmd
 }
