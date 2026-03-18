@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"github.com/SoftKiwiGames/hades/hades/artifacts"
 	"github.com/SoftKiwiGames/hades/hades/registry"
@@ -23,9 +24,10 @@ type Runtime struct {
 	ConsoleStdout  io.Writer // Console only
 	ConsoleStderr  io.Writer // Console only
 	ActionDesc     string    // For formatted console messages
+	SourceDir      string    // Directory of the YAML file that defined the job
 }
 
-func NewRuntime(sshClient ssh.Client, artifactMgr artifacts.Manager, registryMgr registry.Manager, runID string, plan string, target string, host ssh.Host, userEnv map[string]string, stdout, stderr io.Writer, consoleStdout, consoleStderr io.Writer) *Runtime {
+func NewRuntime(sshClient ssh.Client, artifactMgr artifacts.Manager, registryMgr registry.Manager, runID string, plan string, target string, host ssh.Host, userEnv map[string]string, stdout, stderr io.Writer, consoleStdout, consoleStderr io.Writer, sourceDir string) *Runtime {
 
 	// Build environment with HADES_* built-ins
 	env := make(map[string]string)
@@ -55,7 +57,20 @@ func NewRuntime(sshClient ssh.Client, artifactMgr artifacts.Manager, registryMgr
 		Stderr:        stderr,
 		ConsoleStdout: consoleStdout,
 		ConsoleStderr: consoleStderr,
+		SourceDir:     sourceDir,
 	}
+}
+
+// ResolvePath resolves a local path relative to the YAML source directory.
+// Absolute paths are returned as-is.
+func (r *Runtime) ResolvePath(path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	if r.SourceDir == "" {
+		return path
+	}
+	return filepath.Join(r.SourceDir, path)
 }
 
 func (r *Runtime) EnvSlice() []string {

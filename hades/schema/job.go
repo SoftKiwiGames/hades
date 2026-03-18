@@ -6,6 +6,7 @@ type Job struct {
 	Env       map[string]Env      `yaml:"env"`
 	Artifacts map[string]Artifact `yaml:"artifacts"`
 	Actions   []Action            `yaml:"actions"`
+	SourceDir string              `yaml:"-"` // Directory of the YAML file that defined this job
 }
 
 type Guard struct {

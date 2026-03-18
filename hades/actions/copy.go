@@ -70,9 +70,10 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 
 	} else if a.Src != "" {
 		// LOCAL FILES: Read file, calculate checksum
-		f, err := os.Open(a.Src)
+		resolvedSrc := runtime.ResolvePath(a.Src)
+		f, err := os.Open(resolvedSrc)
 		if err != nil {
-			return fmt.Errorf("failed to open source file %s: %w", a.Src, err)
+			return fmt.Errorf("failed to open source file %s: %w", resolvedSrc, err)
 		}
 
 		// Get file size
@@ -91,7 +92,7 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 		}
 
 		// Reopen file for copying (reader was consumed by checksum)
-		f2, err := os.Open(a.Src)
+		f2, err := os.Open(resolvedSrc)
 		if err != nil {
 			return fmt.Errorf("failed to reopen source: %w", err)
 		}
@@ -173,7 +174,7 @@ func (a *CopyAction) DryRun(ctx context.Context, runtime *types.Runtime) string 
 	// Try to get file size for display
 	var sizeInfo string
 	if a.Src != "" {
-		if stat, err := os.Stat(a.Src); err == nil {
+		if stat, err := os.Stat(runtime.ResolvePath(a.Src)); err == nil {
 			sizeInfo = fmt.Sprintf(", %s", formatFileSize(stat.Size()))
 		}
 	}

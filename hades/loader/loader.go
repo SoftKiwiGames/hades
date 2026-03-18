@@ -67,10 +67,12 @@ func (l *Loader) LoadDirectory(rootPath string) (*schema.File, error) {
 		}
 
 		// Merge jobs
+		sourceDir := filepath.Dir(path)
 		for name, job := range file.Jobs {
 			if _, exists := merged.Jobs[name]; exists {
 				return fmt.Errorf("duplicate job %q found in %s", name, path)
 			}
+			job.SourceDir = sourceDir
 			merged.Jobs[name] = job
 		}
 

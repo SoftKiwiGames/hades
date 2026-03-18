@@ -10,27 +10,34 @@ import (
 )
 
 // LocalClient runs commands on the local machine instead of over SSH
-type LocalClient struct{}
+type LocalClient struct {
+	workDir string
+}
 
-func NewLocalClient() Client {
-	return &LocalClient{}
+func NewLocalClient(workDir string) Client {
+	return &LocalClient{workDir: workDir}
 }
 
 func (c *LocalClient) Connect(ctx context.Context, host Host) (Session, error) {
-	return &localSession{}, nil
+	return &localSession{workDir: c.workDir}, nil
 }
 
 func (c *LocalClient) Close() error {
 	return nil
 }
 
-type localSession struct{}
+type localSession struct {
+	workDir string
+}
 
 func (s *localSession) Run(ctx context.Context, cmd string, stdout, stderr io.Writer) error {
 	// Run command using shell
 	execCmd := exec.CommandContext(ctx, "sh", "-c", cmd)
 	execCmd.Stdout = stdout
 	execCmd.Stderr = stderr
+	if s.workDir != "" {
+		execCmd.Dir = s.workDir
+	}
 
 	if err := execCmd.Run(); err != nil {
 		return fmt.Errorf("command failed: %w", err)

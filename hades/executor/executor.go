@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -257,13 +258,13 @@ func (e *executor) executeJob(ctx context.Context, job *schema.Job, jobName stri
 	// Determine which client to use: local or SSH
 	var client ssh.Client
 	if job.Local {
-		client = ssh.NewLocalClient()
+		client = ssh.NewLocalClient(job.SourceDir)
 	} else {
 		client = e.sshClient
 	}
 
 	// Create runtime context with logger writers and console writers
-	runtime := types.NewRuntime(client, artifactMgr, registryMgr, runID, plan, target, host, env, hostLogger.Stdout(), hostLogger.Stderr(), e.stdout, e.stderr)
+	runtime := types.NewRuntime(client, artifactMgr, registryMgr, runID, plan, target, host, env, hostLogger.Stdout(), hostLogger.Stderr(), e.stdout, e.stderr, job.SourceDir)
 
 	// Evaluate guard condition first (before showing job starting)
 	if job.Guard != nil {
@@ -383,7 +384,11 @@ func getActionType(actionSchema *schema.Action) string {
 func (e *executor) loadArtifacts(job *schema.Job, artifactMgr artifacts.Manager) {
 	// Register artifacts defined in the job (loaded lazily on first access)
 	for name, artifact := range job.Artifacts {
-		artifactMgr.Register(name, artifact.Path)
+		path := artifact.Path
+		if !filepath.IsAbs(path) && job.SourceDir != "" {
+			path = filepath.Join(job.SourceDir, path)
+		}
+		artifactMgr.Register(name, path)
 	}
 }
 
@@ -474,12 +479,12 @@ func (e *executor) DryRun(ctx context.Context, file *schema.File, plan *schema.P
 			// Determine which client to use: local or SSH
 			var client ssh.Client
 			if job.Local {
-				client = ssh.NewLocalClient()
+				client = ssh.NewLocalClient(job.SourceDir)
 			} else {
 				client = e.sshClient
 			}
 
-			runtime := types.NewRuntime(client, artifactMgr, registryMgr, "dry-run", planName, stepTargets[0], host, mergedEnv, e.stdout, e.stderr, e.stdout, e.stderr)
+			runtime := types.NewRuntime(client, artifactMgr, registryMgr, "dry-run", planName, stepTargets[0], host, mergedEnv, e.stdout, e.stderr, e.stdout, e.stderr, job.SourceDir)
 
 			fmt.Fprintf(e.stdout, "\n  [%s]\n", host.Name)
 			for _, actionSchema := range job.Actions {

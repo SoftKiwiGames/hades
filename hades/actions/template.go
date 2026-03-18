@@ -26,9 +26,10 @@ func NewTemplateAction(action *schema.ActionTemplate) Action {
 
 func (a *TemplateAction) Execute(ctx context.Context, runtime *types.Runtime) error {
 	// Read template file
-	tmplData, err := os.ReadFile(a.Src)
+	resolvedSrc := runtime.ResolvePath(a.Src)
+	tmplData, err := os.ReadFile(resolvedSrc)
 	if err != nil {
-		return fmt.Errorf("failed to read template file %s: %w", a.Src, err)
+		return fmt.Errorf("failed to read template file %s: %w", resolvedSrc, err)
 	}
 
 	// Parse template
