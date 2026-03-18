@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/SoftKiwiGames/hades/hades/executor"
@@ -59,10 +60,13 @@ func (h *Hades) buildRunCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "run [plan]",
 		Short:         "Execute a plan",
-		Args:          cobra.ExactArgs(1),
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return h.listPlans(configDir)
+			}
 			planName := args[0]
 			return h.runPlan(planName, configDir, targets, envVars, dryRun)
 		},
@@ -145,6 +149,37 @@ func (h *Hades) runPlan(planName, configDir string, targets, envVars []string, d
 	if result.Failed {
 		return fmt.Errorf("plan failed")
 	}
+
+	return nil
+}
+
+func (h *Hades) listPlans(configDir string) error {
+	file, err := h.loader.LoadDirectory(configDir)
+	if err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	if len(file.Plans) == 0 {
+		fmt.Fprintln(h.stdout, "No plans found.")
+		return nil
+	}
+
+	names := make([]string, 0, len(file.Plans))
+	for name := range file.Plans {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	fmt.Fprintf(h.stdout, "\nAvailable plans:\n\n")
+	for _, name := range names {
+		plan := file.Plans[name]
+		fmt.Fprintf(h.stdout, "  %s%s%s", ctc.ForegroundGreen, name, ctc.Reset)
+		if len(plan.Steps) > 0 {
+			fmt.Fprintf(h.stdout, "  (%d steps)", len(plan.Steps))
+		}
+		fmt.Fprintln(h.stdout)
+	}
+	fmt.Fprintln(h.stdout)
 
 	return nil
 }
