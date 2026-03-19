@@ -25,15 +25,19 @@ func NewTemplateAction(action *schema.ActionTemplate) Action {
 }
 
 func (a *TemplateAction) Execute(ctx context.Context, runtime *types.Runtime) error {
+	// Expand env vars in src and dst
+	src := ExpandEnvVars(a.Src, runtime.Env)
+	dst := ExpandEnvVars(a.Dst, runtime.Env)
+
 	// Read template file
-	resolvedSrc := runtime.ResolvePath(a.Src)
+	resolvedSrc := runtime.ResolvePath(src)
 	tmplData, err := os.ReadFile(resolvedSrc)
 	if err != nil {
 		return fmt.Errorf("failed to read template file %s: %w", resolvedSrc, err)
 	}
 
 	// Parse template
-	tmpl, err := template.New(a.Src).Parse(string(tmplData))
+	tmpl, err := template.New(src).Parse(string(tmplData))
 	if err != nil {
 		return fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -53,7 +57,7 @@ func (a *TemplateAction) Execute(ctx context.Context, runtime *types.Runtime) er
 
 	// Write rendered template to intermediate file for inspection
 	// Structure: logs/<runID>/rendered/<hostName>/<templatePath>
-	renderedPath := filepath.Join("logs", runtime.RunID, "rendered", runtime.Host.Name, a.Src)
+	renderedPath := filepath.Join("logs", runtime.RunID, "rendered", runtime.Host.Name, src)
 	if err := os.MkdirAll(filepath.Dir(renderedPath), 0755); err != nil {
 		return fmt.Errorf("failed to create rendered directory: %w", err)
 	}
@@ -69,13 +73,15 @@ func (a *TemplateAction) Execute(ctx context.Context, runtime *types.Runtime) er
 	defer sess.Close()
 
 	// Copy rendered template to remote host
-	if err := sess.CopyFile(ctx, &buf, a.Dst, 0644); err != nil {
-		return fmt.Errorf("failed to copy rendered template to %s: %w", a.Dst, err)
+	if err := sess.CopyFile(ctx, &buf, dst, 0644); err != nil {
+		return fmt.Errorf("failed to copy rendered template to %s: %w", dst, err)
 	}
 
 	return nil
 }
 
 func (a *TemplateAction) DryRun(ctx context.Context, runtime *types.Runtime) string {
-	return fmt.Sprintf("template: %s -> %s", a.Src, a.Dst)
+	src := ExpandEnvVars(a.Src, runtime.Env)
+	dst := ExpandEnvVars(a.Dst, runtime.Env)
+	return fmt.Sprintf("template: %s -> %s", src, dst)
 }
