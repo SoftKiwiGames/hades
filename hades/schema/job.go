@@ -21,6 +21,7 @@ type Action struct {
 	Name     string          `yaml:"name,omitempty"`
 	Run      *ActionRun      `yaml:"run,omitempty"`
 	Copy     *ActionCopy     `yaml:"copy,omitempty"`
+	Fetch    *ActionFetch    `yaml:"fetch,omitempty"`
 	Template *ActionTemplate `yaml:"template,omitempty"`
 	Mkdir    *ActionMkdir    `yaml:"mkdir,omitempty"`
 	Push     *ActionPush     `yaml:"push,omitempty"`
@@ -36,6 +37,11 @@ type ActionCopy struct {
 	Dst      string `yaml:"dst"`
 	Artifact string `yaml:"artifact,omitempty"`
 	Mode     uint32 `yaml:"mode,omitempty"`
+}
+
+type ActionFetch struct {
+	Src string `yaml:"src"`
+	Dst string `yaml:"dst"`
 }
 
 type ActionTemplate struct {

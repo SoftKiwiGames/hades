@@ -159,6 +159,9 @@ func (l *Loader) Validate(file *schema.File) error {
 			if action.Gpg != nil {
 				count++
 			}
+			if action.Fetch != nil {
+				count++
+			}
 			if count == 0 {
 				return fmt.Errorf("job %q action %d has no action type set", jobName, i)
 			}

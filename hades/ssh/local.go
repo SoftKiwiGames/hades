@@ -78,6 +78,14 @@ func (s *localSession) CopyFile(ctx context.Context, content io.Reader, destPath
 	return nil
 }
 
+func (s *localSession) ReadFile(ctx context.Context, remotePath string) (io.ReadCloser, error) {
+	f, err := os.Open(remotePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %s: %w", remotePath, err)
+	}
+	return f, nil
+}
+
 func (s *localSession) Close() error {
 	return nil
 }

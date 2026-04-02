@@ -330,6 +330,9 @@ func (e *executor) createAction(actionSchema *schema.Action, planLogger *logger.
 	if actionSchema.Copy != nil {
 		return actions.NewCopyAction(actionSchema.Copy), nil
 	}
+	if actionSchema.Fetch != nil {
+		return actions.NewFetchAction(actionSchema.Fetch), nil
+	}
 	if actionSchema.Template != nil {
 		return actions.NewTemplateAction(actionSchema.Template), nil
 	}
@@ -359,6 +362,9 @@ func getActionType(actionSchema *schema.Action) string {
 	}
 	if actionSchema.Copy != nil {
 		return "copy"
+	}
+	if actionSchema.Fetch != nil {
+		return "fetch"
 	}
 	if actionSchema.Template != nil {
 		return "template"

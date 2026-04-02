@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 type Session interface {
 	Run(ctx context.Context, cmd string, stdout, stderr io.Writer) error
 	CopyFile(ctx context.Context, content io.Reader, remotePath string, mode uint32) error
+	ReadFile(ctx context.Context, remotePath string) (io.ReadCloser, error)
 	Close() error
 }
 
@@ -96,6 +98,14 @@ func (s *session) CopyFile(ctx context.Context, content io.Reader, remotePath st
 	}
 
 	return nil
+}
+
+func (s *session) ReadFile(ctx context.Context, remotePath string) (io.ReadCloser, error) {
+	var stdout bytes.Buffer
+	if err := s.Run(ctx, fmt.Sprintf("cat %s", remotePath), &stdout, io.Discard); err != nil {
+		return nil, fmt.Errorf("failed to read remote file %s: %w", remotePath, err)
+	}
+	return io.NopCloser(bytes.NewReader(stdout.Bytes())), nil
 }
 
 func (s *session) Close() error {
