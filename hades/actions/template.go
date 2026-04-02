@@ -37,7 +37,19 @@ func (a *TemplateAction) Execute(ctx context.Context, runtime *types.Runtime) er
 	}
 
 	// Parse template
-	tmpl, err := template.New(src).Parse(string(tmplData))
+	tmplDir := filepath.Dir(resolvedSrc)
+	tmpl, err := template.New(src).Funcs(template.FuncMap{
+		"readFile": func(path string) (string, error) {
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(tmplDir, path)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return "", fmt.Errorf("readFile: %w", err)
+			}
+			return string(data), nil
+		},
+	}).Parse(string(tmplData))
 	if err != nil {
 		return fmt.Errorf("failed to parse template: %w", err)
 	}
