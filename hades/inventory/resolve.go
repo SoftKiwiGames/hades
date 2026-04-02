@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/SoftKiwiGames/hades/hades/cloud"
 	"github.com/SoftKiwiGames/hades/hades/selector"
@@ -53,10 +54,14 @@ func resolveProviders(ctx context.Context, providers []Provider, hosts map[strin
 	return dynamic, nil
 }
 
+func expandEnv(s string) string {
+	return os.Expand(s, os.Getenv)
+}
+
 func fetchInstances(ctx context.Context, p Provider) ([]cloud.CloudInstance, error) {
 	switch p.Provider {
 	case "hetzner":
-		token := p.Config["token"]
+		token := expandEnv(p.Config["token"])
 		return cloud.HetznerInstances(ctx, cloud.HetznerConfig{Token: token})
 	case "aws":
 		return cloud.AWSInstances(ctx, cloud.AWSConfig{
