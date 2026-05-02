@@ -70,7 +70,8 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 
 	} else if a.Src != "" {
 		// LOCAL FILES: Read file, calculate checksum
-		resolvedSrc := runtime.ResolvePath(a.Src)
+		src := ExpandEnvVars(a.Src, runtime.Env)
+		resolvedSrc := runtime.ResolvePath(src)
 		f, err := os.Open(resolvedSrc)
 		if err != nil {
 			return fmt.Errorf("failed to open source file %s: %w", resolvedSrc, err)
@@ -97,7 +98,7 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 			return fmt.Errorf("failed to reopen source: %w", err)
 		}
 		reader = f2
-		srcDesc = a.Src
+		srcDesc = src
 
 	} else {
 		return fmt.Errorf("either src or artifact must be specified")
@@ -169,12 +170,13 @@ func (a *CopyAction) Execute(ctx context.Context, runtime *types.Runtime) error 
 }
 
 func (a *CopyAction) DryRun(ctx context.Context, runtime *types.Runtime) string {
+	src := ExpandEnvVars(a.Src, runtime.Env)
 	dst := ExpandEnvVars(a.Dst, runtime.Env)
 
 	// Try to get file size for display
 	var sizeInfo string
-	if a.Src != "" {
-		if stat, err := os.Stat(runtime.ResolvePath(a.Src)); err == nil {
+	if src != "" {
+		if stat, err := os.Stat(runtime.ResolvePath(src)); err == nil {
 			sizeInfo = fmt.Sprintf(", %s", formatFileSize(stat.Size()))
 		}
 	}
@@ -182,7 +184,7 @@ func (a *CopyAction) DryRun(ctx context.Context, runtime *types.Runtime) string 
 	if a.Artifact != "" {
 		return fmt.Sprintf("copy: artifact=%s to=%s (mode: %o%s, verify checksum)", a.Artifact, dst, a.Mode, sizeInfo)
 	}
-	return fmt.Sprintf("copy: %s to %s (mode: %o%s, verify checksum)", a.Src, dst, a.Mode, sizeInfo)
+	return fmt.Sprintf("copy: %s to %s (mode: %o%s, verify checksum)", src, dst, a.Mode, sizeInfo)
 }
 
 // calculateChecksum reads content and returns SHA-256 hash
